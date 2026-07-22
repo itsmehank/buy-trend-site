@@ -72,6 +72,19 @@ body {
 .banner.warn .dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
 .banner .warn-item { color: var(--red); }
 
+.mchips { display: flex; gap: 8px; flex-wrap: wrap; }
+.mchip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  font-family: var(--mono); font-size: 12px; padding: 3px 9px;
+  border-radius: 7px; border: 1px solid var(--line); background: var(--panel-2);
+  white-space: nowrap;
+}
+.mchip b { color: var(--ink); font-weight: 600; }
+.mchip-state { font-size: 10.5px; opacity: 0.9; }
+.mchip.is-fresh { border-color: rgba(75,184,132,0.35); color: var(--green); }
+.mchip.is-intraday { border-color: rgba(242,193,78,0.35); color: var(--gold); }
+.mchip.is-stale { border-color: rgba(229,104,122,0.45); color: var(--red); }
+
 /* ── Controls ── */
 .wrap { max-width: 1180px; margin: 0 auto; padding: 26px 24px 60px; }
 .controls {
