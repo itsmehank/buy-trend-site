@@ -408,9 +408,15 @@ cd site && python3 -m http.server 8899
 ```
 
 브라우저에서 `http://localhost:8899` 접속 후 확인:
-- 칩이 `미국 07-21 최신` / `한국 07-21 장중` 형태로 뜬다 (한국 장중 시간대일 때)
+- 칩이 `미국 <날짜> 최신` / `한국 <날짜> 장중` 형태로 뜬다 (한국 장중 시간대일 때)
 - 창을 좁혀도 배너가 가로로 넘치지 않고 줄바꿈된다
 - 콘솔에 에러가 없다
+
+> **날짜 기대값 주의**: 이 시점의 US 칩은 **`07-22`** 로 보인다. Task 1은 *코드*만
+> 고칠 뿐 **이미 커밋된 `site/data/buy-signals.json`은 바꾸지 않기** 때문이다
+> (현재 `rs_asof = {US: "2026-07-22", KR: "2026-07-21"}`). US가 실제 데이터일
+> (`07-21`)로 맞춰지는 것은 Task 6 Step 5에서 US 배치를 다시 돌린 뒤다.
+> **여기서 US가 07-22로 보이는 것은 정상이므로 멈추지 말 것.**
 
 확인 후 서버 종료: `pkill -f "http.server 8899"`
 
@@ -519,6 +525,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+
+      # 러너 기본 Node에 암묵적으로 의존하지 않도록 버전을 명시한다
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
       - name: 의존성 설치
         run: pip install -r requirements.txt
