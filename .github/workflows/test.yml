@@ -9,6 +9,7 @@ on:
     paths:
       - "pipeline/**"
       - "tests/**"
+      - "scripts/**"
       - "site/**"
       - "!site/data/**"
       - ".github/workflows/test.yml"
@@ -40,3 +41,6 @@ jobs:
 
       - name: 프론트 테스트 (node)
         run: node --test tests/banner-status.test.js
+
+      - name: 배치 커밋 스크립트 테스트 (bash)
+        run: bash tests/commit-data.test.sh

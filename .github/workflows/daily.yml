@@ -77,13 +77,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add site/data
-          if git diff --cached --quiet; then
-            echo "변경 없음 — 커밋 생략"
-          else
-            git commit -m "data: ${{ steps.market.outputs.market }} 갱신 ($(date -u +%FT%TZ))"
-            git push
-          fi
+          ./scripts/commit-data.sh "data: ${{ steps.market.outputs.market }} 갱신 ($(date -u +%FT%TZ))"
 
       - name: Pages 아티팩트 업로드
         uses: actions/upload-pages-artifact@v3
