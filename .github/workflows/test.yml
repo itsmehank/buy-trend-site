@@ -1,0 +1,40 @@
+name: test
+
+# 코드 변경 시에만 테스트를 돌린다. 데이터 배치(daily.yml)와 분리해,
+# 테스트 실패가 일간 데이터 갱신·배포를 막지 않도록 한다.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pipeline/**"
+      - "tests/**"
+      - "site/**"
+      - ".github/workflows/test.yml"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # 러너 기본 Node에 암묵적으로 의존하지 않도록 버전을 명시한다
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 의존성 설치
+        run: pip install -r requirements.txt
+
+      - name: 파이프라인 테스트 (pytest)
+        run: python -m pytest -q
+
+      - name: 프론트 테스트 (node)
+        run: node --test tests/banner-status.test.js
