@@ -268,3 +268,20 @@ def test_us_intraday_excludes_today():
 def test_us_after_close_includes_today():
     # 2026-07-22 17:00 ET (=21:00 UTC, EDT), 마감+버퍼 후 → 당일 07-22
     assert trading.latest_complete_date("US", _utc(2026, 7, 22, 21, 0)) == dt.date(2026, 7, 22)
+
+
+# ── rs_asof = 실제 마지막 봉 날짜
+
+def test_actual_asof_uses_last_bar_not_expected_date():
+    from pipeline.build import actual_asof
+    frames = {
+        "A": pd.DataFrame({"date": [dt.date(2026, 7, 20), dt.date(2026, 7, 21)]}),
+        "B": pd.DataFrame({"date": [dt.date(2026, 7, 17)]}),
+    }
+    # 기대 완결일이 토요일(07-25)이어도 실제 마지막 봉(07-21)을 써야 한다
+    assert actual_asof(frames, "2026-07-25") == "2026-07-21"
+
+
+def test_actual_asof_falls_back_when_no_frames():
+    from pipeline.build import actual_asof
+    assert actual_asof({}, "2026-07-25") == "2026-07-25"

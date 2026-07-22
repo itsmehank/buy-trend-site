@@ -9,7 +9,7 @@ import datetime as dt
 import json
 import logging
 
-from . import build, config, data
+from . import build, config, data, trading
 
 log = logging.getLogger("smoke")
 
@@ -99,7 +99,7 @@ def run() -> int:
         "industry_map": {t: "Software" for t in s_frames},
         "category_map": {}, "mcap_map": {t: 1e12 for t in s_frames},
         "benchmark": "^GSPC", "market_s": regimes["US"],
-        "rs_asof": str(dt.date.today()),
+        "rs_asof": str(trading.latest_complete_date("US")),
     }
     built = {"US": build.build_market("US", frames, meta_info, write_detail=True)}
     fresh = {"price_us": True, "rs_us": True, "price_etf_us": True, "etf_bt_us": True,

@@ -46,12 +46,13 @@ run.py / smoke.py). 따라서 의미 변경으로 깨지는 곳이 없다.
 ```
 입력: { market: 'US'|'KR', asof: 'YYYY-MM-DD', builtAt: ISO문자열, now: Date }
 출력: { state: 'stale'|'intraday'|'fresh', staleDays: number }
-       staleDays = built_at 이후 경과한 일수(캘린더 일, 내림). stale이 아니면 그대로 경과일.
+       staleDays = built_at 이후 경과 시간을 24시간 단위로 내림한 값(달력 날짜 차이가 아니라
+       경과 duration 기준 — 아래 임계 근거의 2.40일/3.00일 계산과 같은 단위).
 ```
 
 **판정 규칙 (우선순위 순)**
 
-1. **stale(지연)** — `now - builtAt` 경과가 **4 캘린더일** 초과
+1. **stale(지연)** — `now - builtAt` 경과가 **4일(24시간×4)** 초과
    (`market`과 무관한 사이트 전역 판정이므로 모든 시장 칩이 함께 지연으로 표시된다)
 2. **intraday(장중)** — 해당 시장이 **평일(월–금, 시장 현지 기준)** 이면서 현재 개장 시간대
    - KR: 09:00–15:30 `Asia/Seoul`

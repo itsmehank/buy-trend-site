@@ -208,10 +208,22 @@ def build_market(market: str, frames: dict[str, pd.DataFrame], meta_info: dict,
         "star_counts": star_counts,
         "stock_n": sum(1 for r in rows if r["asset"] == "stock"),
         "etf_n": sum(1 for r in rows if r["asset"] == "etf"),
-        "rs_asof": meta_info["rs_asof"],
+        "rs_asof": actual_asof(frames, meta_info["rs_asof"]),
         "detail": detail_out,
         "group_rs": group_rs,
     }
+
+
+def actual_asof(frames: dict, fallback: str) -> str:
+    """frames의 실제 마지막 봉 날짜(YYYY-MM-DD). 데이터가 없으면 fallback.
+
+    trading.latest_complete_date()는 '기대 완결일'이라 공휴일·주말엔 봉이 없는
+    날짜가 나온다. 배너에 표시할 기준일은 실제 데이터 날짜여야 하므로 여기서 구한다.
+    """
+    last_dates = [df["date"].iloc[-1] for df in frames.values() if len(df)]
+    if not last_dates:
+        return fallback
+    return str(max(last_dates))
 
 
 def _group_rs(frames, rs_pct, meta_info) -> dict:

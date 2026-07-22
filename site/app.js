@@ -51,20 +51,60 @@ async function load() {
   }
 }
 
+const MARKET_LABEL = { US: "미국", KR: "한국" };
+const STATE_LABEL = { fresh: "최신", intraday: "장중", stale: "지연" };
+
 function renderBanner() {
   const el = document.getElementById("banner");
   const m = state.meta || {};
   const warnings = m.warnings || [];
-  const asof = fmtDate(m.built_at);
-  const warn = warnings.length > 0;
-  el.classList.toggle("warn", warn);
-  let html = `<span class="dot"></span><span>신호 기준일 <span class="asof">${asof}</span></span>`;
-  if (warn) {
-    html += warnings.map((w) => `<span class="warn-item">⚠ ${w}</span>`).join("");
-  } else {
-    html += `<span>데이터 정상</span>`;
+
+  if (!window.BannerStatus) {
+    el.classList.toggle("warn", warnings.length > 0);
+    el.innerHTML =
+      `<span class="dot"></span><span>신호 기준일 <span class="asof">${fmtDate(m.built_at)}</span></span>` +
+      warnings.map((w) => `<span class="warn-item">⚠ ${w}</span>`).join("");
+    return;
   }
-  el.innerHTML = html;
+
+  const rsAsof = (m.star && m.star.rs_asof) || {};
+  const byCountry = m.by_country || {};
+  const now = new Date();
+
+  // 데이터가 있는 시장만 칩으로 표시
+  const markets = ["US", "KR"].filter((k) => (byCountry[k] || 0) > 0);
+  const chips = markets.map((k) => {
+    const st = window.BannerStatus.bannerStatus({
+      market: k, builtAt: m.built_at, now,
+    });
+    const date = window.BannerStatus.fmtDateOnly(rsAsof[k]);
+    return {
+      market: k, ...st, date,
+      html: `<span class="mchip is-${st.state}">${MARKET_LABEL[k]} <b>${date}</b>` +
+            `<span class="mchip-state">${STATE_LABEL[st.state]}</span></span>`,
+    };
+  });
+
+  const stale = chips.find((c) => c.state === "stale");
+  const intraday = chips.filter((c) => c.state === "intraday");
+  const hasWarn = warnings.length > 0 || Boolean(stale);
+  el.classList.toggle("warn", hasWarn);
+
+  const notes = [];
+  if (stale) {
+    notes.push({ cls: "warn-item", text: `⚠ 데이터가 ${stale.staleDays}일째 갱신되지 않았습니다 — 배치를 확인하세요` });
+  } else if (intraday.length) {
+    const names = intraday.map((c) => MARKET_LABEL[c.market]).join("·");
+    notes.push({ cls: "note", text: `지금 ${names} 장중 — 직전 완결일 기준입니다` });
+  }
+  warnings.forEach((w) => notes.push({ cls: "warn-item", text: `⚠ ${w}` }));
+
+  el.innerHTML =
+    `<span class="dot"></span>` +
+    (chips.length
+      ? `<span class="mchips">${chips.map((c) => c.html).join("")}</span>`
+      : `<span>신호 기준일 <span class="asof">${fmtDate(m.built_at)}</span></span>`) +
+    notes.map((n) => `<span class="${n.cls}">${n.text}</span>`).join("");
 }
 
 function renderFoot(data) {

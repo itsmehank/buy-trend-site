@@ -132,9 +132,10 @@
           <div class="g-row">
             <div class="g-row-k">상단 배너</div>
             <div class="g-row-v">
-              <b>신호 기준일</b>(데이터를 만든 날짜)이 적혀 있습니다.
-              <span class="g-tag warn">붉은색 경고</span>가 뜨면 데이터 지연(신호가 묵음)이나
-              약세장 같은 주의 신호가 있다는 뜻이니 참고만 하세요.
+              시장별로 <b>데이터 기준일</b>과 상태가 칩으로 표시됩니다.
+              <b>최신</b>=장 마감 후 최신 데이터, <b>장중</b>=지금 장이 열려 있어
+              오늘치가 아직 안 들어옴(직전 완결일 기준), <b>지연</b>=데이터가 며칠째
+              갱신되지 않음. <span class="g-tag warn">붉은색</span>이면 참고만 하세요.
             </div>
           </div>
           <div class="g-row">
@@ -349,6 +350,7 @@
     </article>
   </template>
 
+  <script src="banner-status.js"></script>
   <script src="guide.js"></script>
   <script src="app.js"></script>
 </body>

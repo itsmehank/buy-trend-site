@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - 설계 문서: `docs/superpowers/specs/2026-07-22-banner-market-status-design.md`
-- 지연 임계: **4 캘린더일 초과** (정상 최대 공백 2.40일, KR 누락 시 3.00일이므로 3일은 부족)
+- 지연 임계: **4일(24시간×4) 초과** — 달력 날짜 차이가 아니라 경과 duration (정상 최대 공백 2.40일, KR 누락 시 3.00일이므로 3일은 부족)
 - 장중 판정: **평일(월–금, 시장 현지 기준) + 개장 시간대**. KR `09:00–15:30 Asia/Seoul`, US `09:30–16:00 America/New_York`
 - 상태 우선순위: `stale` → `intraday` → `fresh`
 - 날짜 문자열(`YYYY-MM-DD`)은 **절대 `new Date()`로 파싱하지 않는다** (뉴욕/LA에서 하루 밀림)
