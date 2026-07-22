@@ -71,6 +71,7 @@ body {
 .banner.warn { border-color: #5a2b33; background: #1e1418; color: #f0b8c0; }
 .banner.warn .dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
 .banner .warn-item { color: var(--red); }
+.banner .note { color: var(--gold); }
 
 .mchips { display: flex; gap: 8px; flex-wrap: wrap; }
 .mchip {

@@ -10,6 +10,7 @@ on:
       - "pipeline/**"
       - "tests/**"
       - "site/**"
+      - "!site/data/**"
       - ".github/workflows/test.yml"
       - "requirements.txt"
   pull_request:
