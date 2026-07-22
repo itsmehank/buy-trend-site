@@ -1,0 +1,11 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 가격 이력 캐시 (GitHub Actions의 actions/cache가 관리 — 커밋하지 않음)
+cache/
+
+# OS
+.DS_Store

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>매수 · 추세추종</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div class="brand">
+        <span class="brand-mark">◆</span>
+        <div>
+          <h1>매수 <span class="brand-sub">/ 추세추종</span></h1>
+          <p class="tagline">지금 살 만한 자리를, 과거 성적표로 증명한다</p>
+        </div>
+      </div>
+      <div id="banner" class="banner"></div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="controls">
+      <div class="filters" id="filters">
+        <div class="filter-group" data-key="country">
+          <span class="filter-label">국가</span>
+          <div class="chips">
+            <button class="chip is-active" data-val="all">전체</button>
+            <button class="chip" data-val="KR">한국</button>
+            <button class="chip" data-val="US">미국</button>
+          </div>
+        </div>
+        <div class="filter-group" data-key="asset">
+          <span class="filter-label">자산</span>
+          <div class="chips">
+            <button class="chip is-active" data-val="all">전체</button>
+            <button class="chip" data-val="stock">주식</button>
+            <button class="chip" data-val="etf">ETF</button>
+          </div>
+        </div>
+        <div class="filter-group" data-key="signal">
+          <span class="filter-label">신호</span>
+          <div class="chips">
+            <button class="chip is-active" data-val="all">전체</button>
+            <button class="chip" data-val="이평">이평</button>
+            <button class="chip" data-val="박스">박스</button>
+            <button class="chip" data-val="신고가">신고가</button>
+          </div>
+        </div>
+        <div class="filter-group" data-key="mcap">
+          <span class="filter-label">시총</span>
+          <div class="chips">
+            <button class="chip is-active" data-val="0">전체</button>
+            <button class="chip" data-val="1e9">≥$1B</button>
+            <button class="chip" data-val="1e10">≥$10B</button>
+            <button class="chip" data-val="1e11">≥$100B</button>
+            <button class="chip" data-val="1e12">≥$1T</button>
+          </div>
+        </div>
+      </div>
+      <div class="sortbar">
+        <label class="sort-label" for="sort">정렬</label>
+        <select id="sort">
+          <option value="stars">별 우선</option>
+          <option value="ev">EV순</option>
+          <option value="win">승률순</option>
+          <option value="rs">RS순</option>
+        </select>
+        <span class="count" id="count">—</span>
+      </div>
+    </section>
+
+    <section id="grid" class="grid" aria-live="polite"></section>
+    <p id="empty" class="empty" hidden>조건에 맞는 종목이 없습니다.</p>
+  </main>
+
+  <footer class="foot">
+    <p>기술적 신호·상대강도 백테스트 · 투자 판단·손실 책임은 본인에게 있습니다.</p>
+    <p class="foot-meta" id="footMeta"></p>
+  </footer>
+
+  <template id="card-tpl">
+    <article class="card">
+      <button class="card-head" aria-expanded="false">
+        <span class="rank"></span>
+        <span class="stars"></span>
+        <span class="card-name">
+          <span class="nm"></span>
+          <span class="tk"></span>
+        </span>
+        <span class="sig-badge"></span>
+        <span class="chev">▾</span>
+      </button>
+      <div class="card-phrase">
+        <span class="phrase"></span>
+        <span class="steady">과거 데이터상 꾸준한 유형입니다</span>
+      </div>
+      <div class="card-body" hidden></div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

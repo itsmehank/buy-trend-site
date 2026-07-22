@@ -1,0 +1,96 @@
+name: daily-buy-signals
+
+# 두 시장을 서로 다른 시각에 갱신한다(명세서 §4.1).
+#  - 미국 장 마감 후: 07:00 KST = 22:00 UTC
+#  - 한국 장 마감 후: 16:30 KST = 07:30 UTC
+# 각 실행은 해당 시장 데이터만 내려받아 기존 JSON과 병합하고(pipeline.build.merge_and_write),
+# 가격 이력 parquet는 actions/cache로 캐시해 매일 증분만 다운로드한다.
+# 실패 시 직전 커밋의 JSON이 그대로 남아 사이트가 깨지지 않는다.
+
+on:
+  schedule:
+    - cron: "0 22 * * 1-5"    # US
+    - cron: "30 7 * * 1-5"    # KR
+  workflow_dispatch:
+    inputs:
+      market:
+        description: "갱신할 시장"
+        type: choice
+        options: [all, us, kr]
+        default: all
+
+permissions:
+  contents: write     # 산출 JSON 커밋
+  pages: write        # Pages 배포
+  id-token: write     # deploy-pages OIDC
+
+concurrency:
+  group: buy-signals
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 시장 결정
+        id: market
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "market=${{ github.event.inputs.market }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 22 * * 1-5" ]; then
+            echo "market=us" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "30 7 * * 1-5" ]; then
+            echo "market=kr" >> "$GITHUB_OUTPUT"
+          else
+            echo "market=all" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: 의존성 설치
+        run: pip install -r requirements.txt
+
+      - name: 가격 캐시 복원 (parquet)
+        uses: actions/cache@v4
+        with:
+          path: cache
+          key: prices-${{ steps.market.outputs.market }}-${{ github.run_id }}
+          restore-keys: |
+            prices-${{ steps.market.outputs.market }}-
+            prices-
+
+      - name: 배치 실행
+        run: python -m pipeline.run --market "${{ steps.market.outputs.market }}"
+
+      - name: 산출 JSON 커밋
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add site/data
+          if git diff --cached --quiet; then
+            echo "변경 없음 — 커밋 생략"
+          else
+            git commit -m "data: ${{ steps.market.outputs.market }} 갱신 ($(date -u +%FT%TZ))"
+            git push
+          fi
+
+      - name: Pages 아티팩트 업로드
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: GitHub Pages 배포
+        id: deployment
+        uses: actions/deploy-pages@v4
