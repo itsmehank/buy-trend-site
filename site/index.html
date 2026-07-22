@@ -23,61 +23,305 @@
       </div>
       <div id="banner" class="banner"></div>
     </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab is-active" data-view="list">매수 목록</button>
+      <button class="tab" data-view="guide">데이터 읽는 법</button>
+    </nav>
   </header>
 
   <main class="wrap">
-    <section class="controls">
-      <div class="filters" id="filters">
-        <div class="filter-group" data-key="country">
-          <span class="filter-label">국가</span>
-          <div class="chips">
-            <button class="chip is-active" data-val="all">전체</button>
-            <button class="chip" data-val="KR">한국</button>
-            <button class="chip" data-val="US">미국</button>
+    <!-- ── 매수 목록 뷰 ── -->
+    <section id="view-list">
+      <div class="controls">
+        <div class="filters" id="filters">
+          <div class="filter-group" data-key="country">
+            <span class="filter-label">국가</span>
+            <div class="chips">
+              <button class="chip is-active" data-val="all">전체</button>
+              <button class="chip" data-val="KR">한국</button>
+              <button class="chip" data-val="US">미국</button>
+            </div>
+          </div>
+          <div class="filter-group" data-key="asset">
+            <span class="filter-label">자산</span>
+            <div class="chips">
+              <button class="chip is-active" data-val="all">전체</button>
+              <button class="chip" data-val="stock">주식</button>
+              <button class="chip" data-val="etf">ETF</button>
+            </div>
+          </div>
+          <div class="filter-group" data-key="signal">
+            <span class="filter-label">신호</span>
+            <div class="chips">
+              <button class="chip is-active" data-val="all">전체</button>
+              <button class="chip" data-val="이평">이평</button>
+              <button class="chip" data-val="박스">박스</button>
+              <button class="chip" data-val="신고가">신고가</button>
+            </div>
+          </div>
+          <div class="filter-group" data-key="mcap">
+            <span class="filter-label">시총</span>
+            <div class="chips">
+              <button class="chip is-active" data-val="0">전체</button>
+              <button class="chip" data-val="1e9">≥$1B</button>
+              <button class="chip" data-val="1e10">≥$10B</button>
+              <button class="chip" data-val="1e11">≥$100B</button>
+              <button class="chip" data-val="1e12">≥$1T</button>
+            </div>
           </div>
         </div>
-        <div class="filter-group" data-key="asset">
-          <span class="filter-label">자산</span>
-          <div class="chips">
-            <button class="chip is-active" data-val="all">전체</button>
-            <button class="chip" data-val="stock">주식</button>
-            <button class="chip" data-val="etf">ETF</button>
-          </div>
-        </div>
-        <div class="filter-group" data-key="signal">
-          <span class="filter-label">신호</span>
-          <div class="chips">
-            <button class="chip is-active" data-val="all">전체</button>
-            <button class="chip" data-val="이평">이평</button>
-            <button class="chip" data-val="박스">박스</button>
-            <button class="chip" data-val="신고가">신고가</button>
-          </div>
-        </div>
-        <div class="filter-group" data-key="mcap">
-          <span class="filter-label">시총</span>
-          <div class="chips">
-            <button class="chip is-active" data-val="0">전체</button>
-            <button class="chip" data-val="1e9">≥$1B</button>
-            <button class="chip" data-val="1e10">≥$10B</button>
-            <button class="chip" data-val="1e11">≥$100B</button>
-            <button class="chip" data-val="1e12">≥$1T</button>
-          </div>
+        <div class="sortbar">
+          <label class="sort-label" for="sort">정렬</label>
+          <select id="sort">
+            <option value="stars">별 우선</option>
+            <option value="ev">EV순</option>
+            <option value="win">승률순</option>
+            <option value="rs">RS순</option>
+          </select>
+          <span class="count" id="count">—</span>
         </div>
       </div>
-      <div class="sortbar">
-        <label class="sort-label" for="sort">정렬</label>
-        <select id="sort">
-          <option value="stars">별 우선</option>
-          <option value="ev">EV순</option>
-          <option value="win">승률순</option>
-          <option value="rs">RS순</option>
-        </select>
-        <span class="count" id="count">—</span>
-      </div>
+
+      <div id="grid" class="grid" aria-live="polite"></div>
+      <p id="empty" class="empty" hidden>조건에 맞는 종목이 없습니다.</p>
     </section>
 
-    <section id="grid" class="grid" aria-live="polite"></section>
-    <p id="empty" class="empty" hidden>조건에 맞는 종목이 없습니다.</p>
+    <!-- ── 데이터 읽는 법 뷰 ── -->
+    <section id="view-guide" hidden>
+      <div class="guide">
+
+        <!-- 인트로 -->
+        <header class="g-hero">
+          <span class="g-kicker">데이터 읽는 법</span>
+          <h2>이 화면, 어떻게 읽나요?</h2>
+          <p class="g-lead">
+            처음 보면 숫자가 많아 어렵게 느껴지지만, 규칙은 딱 하나입니다.
+            <b>"강한 종목이 살 만한 자리에 왔을 때, 과거에 똑같이 샀다면 어땠는지"</b>를
+            보여줄 뿐입니다. 이 페이지만 읽으면 <b>목록 화면의 모든 숫자</b>를 이해할 수 있어요.
+          </p>
+        </header>
+
+        <!-- 큰 그림 -->
+        <h3 class="g-h3"><span class="g-num">STEP</span> 이 사이트가 하는 일 3단계</h3>
+        <div class="g-steps">
+          <div class="g-step">
+            <span class="g-step-no">1</span>
+            <h4>강한 종목만 거른다</h4>
+            <p>시장에서 <b>가장 강하게 오른 상위 10% 종목</b>만 후보로 삼습니다.
+              이 "얼마나 강한가"를 0~100으로 매긴 점수가 <b>상대강도(RS)</b>이고,
+              <b>RS 90 이상</b>만 통과합니다.</p>
+          </div>
+          <div class="g-step">
+            <span class="g-step-no">2</span>
+            <h4>'살 만한 자리'일 때만 올린다</h4>
+            <p>강한 종목이라도 아무 때나 사는 게 아닙니다. 정해진 <b>매수 구간</b>
+              (예: 이동평균선 근처, 박스 돌파 직후)에 <b>지금 현재가가 들어와 있는</b>
+              종목만 목록에 나옵니다.</p>
+          </div>
+          <div class="g-step">
+            <span class="g-step-no">3</span>
+            <h4>과거 성적으로 증명한다</h4>
+            <p>과거에 <b>같은 신호가 났던 모든 날</b> 샀다고 가정하고, 며칠 뒤 팔았을 때
+              몇 %가 수익이었는지(<b>승률</b>) 계산해 붙입니다. 이게 카드 속 성적표입니다.</p>
+          </div>
+        </div>
+
+        <!-- 화면 위에서 아래로 -->
+        <h3 class="g-h3"><span class="g-num">A</span> 목록 화면을 위에서 아래로</h3>
+        <div class="g-rows">
+          <div class="g-row">
+            <div class="g-row-k">상단 배너</div>
+            <div class="g-row-v">
+              <b>신호 기준일</b>(데이터를 만든 날짜)이 적혀 있습니다.
+              <span class="g-tag warn">붉은색 경고</span>가 뜨면 데이터 지연(신호가 묵음)이나
+              약세장 같은 주의 신호가 있다는 뜻이니 참고만 하세요.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">필터 칩 4종</div>
+            <div class="g-row-v">
+              <b>국가</b>(한국/미국) · <b>자산</b>(주식/ETF) · <b>신호</b>(이평/박스/신고가) ·
+              <b>시총</b>(≥$1B~≥$1T). 누르면 즉시 걸러집니다. 여러 개를 동시에 걸 수 있어요.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">정렬 4종</div>
+            <div class="g-row-v">
+              <b>별 우선</b>(기본) · <b>EV순</b> · <b>승률순</b> · <b>RS순</b>.
+              기본값 '별 우선'은 별점이 높은 종목을 위로, 같으면 기대값(EV)이 큰 순서로 놓습니다.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">"N종목" 숫자</div>
+            <div class="g-row-v">
+              필터·정렬을 마친 뒤 <b>상위 100개까지만</b> 카드로 보여줍니다. 그 개수 표시입니다.
+            </div>
+          </div>
+        </div>
+
+        <!-- 카드 접힘 -->
+        <h3 class="g-h3"><span class="g-num">B</span> 카드 한 장(접힌 상태) 읽기</h3>
+        <p class="g-p">카드는 왼쪽부터 이렇게 읽습니다.</p>
+        <div class="g-rows">
+          <div class="g-row">
+            <div class="g-row-k">순번 · 별점</div>
+            <div class="g-row-v">
+              정렬 순위와 <b>별점</b>입니다. <span class="g-star">★★★</span> = 위험 요인 없음,
+              <span class="g-star">★★</span> = 가벼운 과열 신호 있음,
+              <span class="g-star">★</span> = "대형주 무리한 급등" 위험. ETF는 별점이 없습니다.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">신호 배지</div>
+            <div class="g-row-v">
+              무엇을 근거로 뽑혔는지입니다.
+              <span class="sig-badge sig-이평">이평</span> 이동평균선까지 눌린 자리 ·
+              <span class="sig-badge sig-박스">박스</span> 횡보 박스권 상단 돌파 ·
+              <span class="sig-badge sig-신고가">신고가</span> 신고가 돌파.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">한 줄 문구</div>
+            <div class="g-row-v">
+              <span class="g-mono">"EMA40 장기 근접 · 252일 보유"</span> 처럼 신호 종류와
+              <b>가장 성적이 좋았던 보유기간</b>을 요약해 줍니다.
+            </div>
+          </div>
+        </div>
+
+        <!-- 그림 1: 펼친 카드 요약부 -->
+        <h3 class="g-h3"><span class="g-num">C</span> 카드를 펼치면 — 요약부</h3>
+        <p class="g-p">
+          카드를 <b>클릭</b>하면(또는 오른쪽 <b>▾</b> 화살표) 아래처럼 펼쳐지며 상세 성적표가 나옵니다.
+          실제 사이트에서 <b>Kodiak Gas Services(KGS)</b> 카드를 펼친 화면이고, 숫자마다 번호를 붙였어요.
+        </p>
+        <figure class="annot">
+          <div class="annot-img">
+            <img src="assets/card-summary.png" alt="KGS 카드 펼침 요약부 실제 캡처" />
+            <span class="marker" style="left:4.6%;top:9%">1</span>
+            <span class="marker" style="left:12.9%;top:8.7%">2</span>
+            <span class="marker" style="left:29%;top:6.5%">3</span>
+            <span class="marker" style="left:13.5%;top:12.5%">4</span>
+            <span class="marker" style="left:90.3%;top:8.7%">5</span>
+            <span class="marker" style="left:3.7%;top:18%">6</span>
+            <span class="marker" style="left:6.5%;top:39.1%">7</span>
+            <span class="marker" style="left:16%;top:46%">8</span>
+            <span class="marker" style="left:43%;top:46%">9</span>
+            <span class="marker" style="left:90.5%;top:46%">10</span>
+            <span class="marker" style="left:6%;top:63.5%">11</span>
+          </div>
+          <figcaption>▲ 실제 사이트 화면 캡처 (2026-07-22 기준 KGS)</figcaption>
+        </figure>
+        <ol class="legend">
+          <li><b>순번</b> — 현재 정렬 기준의 순위.</li>
+          <li><b>별점</b> — ★★★(위험 없음) / ★★(가벼운 과열) / ★(대형주 급등 위험).</li>
+          <li><b>종목명</b> — 회사 이름. (미국은 영문, 한국은 한글)</li>
+          <li><b>티커</b> — 종목 코드. ETF는 여기에 카테고리도 붙습니다.</li>
+          <li><b>신호 배지</b> — 매수 근거(이평/박스/신고가).</li>
+          <li><b>한 줄 문구</b> — 신호 + 최적 보유기간 요약.</li>
+          <li><b>섹터·산업 RS 칩</b> — 이 종목이 속한 업종의 평균 강도(0~100).
+            <span class="g-mono">Utilities 47</span> = 유틸리티 업종 평균 RS 47.</li>
+          <li><b>매수 구간</b> — 지금 사도 되는 가격대. 이 안이면 후보에 오릅니다.</li>
+          <li><b>구간 내 배지</b> — 현재가가 매수 구간 안에 있다는 표시(초록).</li>
+          <li><b>종가</b> — 데이터 기준일의 마지막 가격.</li>
+          <li><b>핵심 지표 6칸</b> — 아래 6개가 한 눈에:
+            <span class="g-mono">종합 RS</span>(강도) ·
+            <span class="g-mono">승률</span>(과거 이겼던 비율) ·
+            <span class="g-mono">표본수</span>(과거 신호 횟수) ·
+            <span class="g-mono">평균이익</span> ·
+            <span class="g-mono">평균손실</span> ·
+            <span class="g-mono">손익비</span>(이익÷손실).</li>
+        </ol>
+
+        <!-- 그림 2: 8기간 성적표 -->
+        <h3 class="g-h3"><span class="g-num">D</span> 8기간 성적표 읽기</h3>
+        <p class="g-p">
+          같은 카드를 더 내리면 나오는 표입니다. "이 신호로 산 뒤 <b>며칠</b> 들고 있었는지"에 따라
+          성적이 어떻게 달라지는지 8가지 기간을 한꺼번에 비교합니다.
+        </p>
+        <figure class="annot">
+          <div class="annot-img">
+            <img src="assets/card-table.png" alt="KGS 8기간 성적표 실제 캡처" />
+            <span class="marker" style="left:9%;top:3.5%">1</span>
+            <span class="marker" style="left:49%;top:12%">2</span>
+            <span class="marker" style="left:6.2%;top:64.5%">3</span>
+            <span class="marker" style="left:10.7%;top:82%">4</span>
+            <span class="marker" style="left:71.6%;top:82%">5</span>
+            <span class="marker" style="left:9%;top:93%">6</span>
+          </div>
+          <figcaption>▲ 실제 사이트 화면 캡처 — 8기간 성적표</figcaption>
+        </figure>
+        <ol class="legend">
+          <li><b>표 제목</b> — 어떤 신호의 성적표인지(EMA40 장기 이평 눌림목).</li>
+          <li><b>6개 열</b> — 보유기간 / 승률 / 평균이익 / 평균손실 / 손익비 / 표본수.
+            (표본 열 이름은 신호별로 터치수·돌파수·표본수로 달라집니다)</li>
+          <li><b>각 기간 행</b> — 예: 60일 행은 "사서 60거래일 뒤 팔았을 때"의 성적.
+            길게 들수록 이익도 손실도 커지는 게 보입니다.</li>
+          <li><b>★ 최적 보유기간</b>(노란 강조) — 8기간 중 <b>기대값(EV)이 가장 높은</b> 기간.
+            카드 위쪽 요약 숫자는 바로 이 행의 값입니다. 여기선 <b>252일(=1년)</b>.</li>
+          <li><b>손익비가 클 때 주의</b> — 여기 <span class="g-mono">304.86</span>은
+            평균손실이 -0.1%로 <b>거의 0에 가까워</b> 나눗셈 값이 커진 것.
+            숫자 크기만 보지 말고 반드시 <b>표본수</b>와 함께 판단하세요.</li>
+          <li><b>주석</b> — 20·60·126·252일을 개월/년으로 환산. 손실이 한 번도 없던 기간은
+            평균손실·손익비가 <span class="g-mono">—</span>로 표시되고, 이 기간은 최적 기간
+            후보에서 제외됩니다(값을 계산할 수 없으므로).</li>
+        </ol>
+
+        <!-- 용어 사전 -->
+        <h3 class="g-h3"><span class="g-num">E</span> 핵심 용어 사전</h3>
+        <dl class="g-dl">
+          <dt>상대강도 (RS, 0~100)</dt>
+          <dd>최근 3·6·9·12개월 수익률을 종합해 <b>같은 시장 안에서 몇 등인지</b>를 백분위로
+            매긴 점수. RS 90 = 시장 상위 10%. 이 사이트는 RS 90 이상만 다룹니다.</dd>
+          <dt>신호 3종</dt>
+          <dd><b>이평</b> = 상승 종목이 이동평균선까지 눌렸을 때 · <b>박스</b> = 오래 횡보하던
+            박스권 위를 뚫을 때 · <b>신고가</b> = 최근(또는 역대) 최고가를 돌파할 때.</dd>
+          <dt>매수 구간</dt>
+          <dd>지금 사도 되는 가격 범위. 이평은 "이평선 −2%~+3%", 박스·신고가는
+            "돌파선 ~ +5%". 현재가가 이 안에 있는 종목만 목록에 나옵니다.</dd>
+          <dt>승률 · 평균이익 · 평균손실</dt>
+          <dd>과거 같은 신호로 샀다 팔았을 때 <b>이긴 거래 비율</b>, 이긴 거래의 평균 수익,
+            진 거래의 평균 손실(음수).</dd>
+          <dt>손익비</dt>
+          <dd>평균이익 ÷ |평균손실|. 높을수록 "한 번 이길 때 크게, 질 때 작게" 벌었다는 뜻.
+            단, 손실이 0에 가까우면 값이 비정상적으로 커지니 표본수와 함께 보세요.</dd>
+          <dt>표본수</dt>
+          <dd>과거에 이 신호가 <b>몇 번 나왔는지</b>. 이 사이트는 <b>20회 이상</b>만 신뢰해
+            목록에 올립니다. 표본이 적으면 우연일 수 있습니다.</dd>
+          <dt>최적 보유기간 · EV(기대값)</dt>
+          <dd>8기간 중 <b>기대값이 가장 높은</b> 기간. EV는 "한 번 거래로 평균 몇 배를 기대하는가"를
+            손실 크기로 나눈 값(R배수)입니다. 카드 요약 숫자는 이 기간 기준입니다.</dd>
+          <dt>별점</dt>
+          <dd>기본 ★★★에서 <b>위험 신호(과열·윗꼬리·변동성 최상위, 대형주 급등)</b>가 있으면
+            강등됩니다. 감점 사유는 펼친 카드가 아니라 데이터의 <span class="g-mono">cut_reason</span>에
+            기록됩니다.</dd>
+        </dl>
+
+        <!-- 실전 풀이 -->
+        <h3 class="g-h3"><span class="g-num">F</span> 실전: KGS 카드를 문장으로 풀면</h3>
+        <blockquote class="g-quote">
+          KGS는 시장 상위권(<b>RS 92</b>)의 강한 종목이고, 지금 <b>EMA40 이동평균선 근처</b>
+          ($66.87~$70.28)까지 눌린 상태입니다(종가 $66.89 — <b>구간 내</b>).
+          과거 이 자리에서 샀다면 <b>1년(252일)</b> 보유 시 25번 중 <b>96%가 수익</b>,
+          평균 <b>+40.3%</b>였습니다. <b>★★★</b>은 과열·급등 같은 위험 감점 요인이 없다는 뜻입니다.
+        </blockquote>
+
+        <!-- 주의 -->
+        <div class="g-warnbox">
+          <h4>⚠ 꼭 기억하세요</h4>
+          <ul>
+            <li><b>과거 성적 ≠ 미래 수익.</b> 백테스트는 "예전엔 이랬다"일 뿐, 보장이 아닙니다.</li>
+            <li>일부 계산 기준은 원본 사이트가 공개하지 않아 <b>자체 기준</b>으로 정했습니다.
+              그래서 선정 종목이 원본과 다를 수 있습니다(구조·해석법은 동일).</li>
+            <li>이 사이트는 정보 제공용이며, <b>모든 투자 판단과 손실 책임은 본인</b>에게 있습니다.</li>
+          </ul>
+        </div>
+
+        <div class="g-cta">
+          <button class="tab-jump" data-view="list">← 매수 목록으로 돌아가 직접 확인하기</button>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="foot">
@@ -105,6 +349,7 @@
     </article>
   </template>
 
+  <script src="guide.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

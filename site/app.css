@@ -215,3 +215,125 @@ body {
 
 .skeleton { height: 96px; border-radius: var(--radius); background: linear-gradient(90deg, var(--panel), var(--panel-2), var(--panel)); background-size: 200% 100%; animation: shine 1.3s infinite; }
 @keyframes shine { to { background-position: -200% 0; } }
+
+/* ── Tabs ── */
+.tabs {
+  max-width: 1180px; margin: 0 auto; padding: 0 24px;
+  display: flex; gap: 4px;
+}
+.tab {
+  font-family: var(--sans); font-size: 13.5px; font-weight: 600;
+  color: var(--ink-3); background: none; border: 0; cursor: pointer;
+  padding: 11px 16px 12px; border-bottom: 2px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.tab:hover { color: var(--ink-2); }
+.tab.is-active { color: var(--gold); border-bottom-color: var(--gold); }
+
+/* ── Guide ── */
+.guide { max-width: 860px; margin: 8px auto 0; animation: rise 0.4s ease both; }
+.g-hero { padding: 8px 0 6px; }
+.g-kicker {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--gold);
+}
+.g-hero h2 { font-size: 30px; margin: 8px 0 12px; letter-spacing: -0.03em; }
+.g-lead { font-size: 15.5px; line-height: 1.75; color: var(--ink-2); margin: 0; }
+.g-lead b, .g-p b, .g-row-v b, .g-step p b, .g-dl dd b, .g-quote b, .g-warnbox b { color: var(--ink); font-weight: 600; }
+
+.g-h3 {
+  font-size: 19px; margin: 40px 0 16px; padding-top: 20px;
+  border-top: 1px solid var(--line); display: flex; align-items: center; gap: 11px;
+  letter-spacing: -0.02em;
+}
+.g-num {
+  font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--gold);
+  background: var(--gold-dim); border-radius: 6px; padding: 3px 8px; min-width: 20px; text-align: center;
+}
+.g-p { font-size: 14.5px; line-height: 1.7; color: var(--ink-2); margin: 0 0 16px; }
+
+/* 3단계 */
+.g-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 700px) { .g-steps { grid-template-columns: 1fr; } }
+.g-step {
+  background: linear-gradient(180deg, var(--panel), var(--bg-2));
+  border: 1px solid var(--line); border-radius: 12px; padding: 18px 16px; position: relative;
+}
+.g-step-no {
+  font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--bg);
+  background: var(--gold); width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; margin-bottom: 12px;
+}
+.g-step h4 { margin: 0 0 8px; font-size: 15px; }
+.g-step p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--ink-2); }
+
+/* key-value 행 */
+.g-rows { display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.g-row { display: grid; grid-template-columns: 130px 1fr; gap: 16px; background: var(--panel); padding: 14px 16px; }
+@media (max-width: 620px) { .g-row { grid-template-columns: 1fr; gap: 4px; } }
+.g-row-k { font-weight: 600; font-size: 13.5px; color: var(--gold); }
+.g-row-v { font-size: 13.5px; line-height: 1.65; color: var(--ink-2); }
+.g-tag { font-family: var(--mono); font-size: 11px; padding: 2px 7px; border-radius: 5px; }
+.g-tag.warn { color: var(--red); background: #1e1418; border: 1px solid #5a2b33; }
+.g-star { color: var(--gold); font-size: 12px; }
+.g-mono { font-family: var(--mono); font-size: 12.5px; color: var(--ink); background: var(--panel-2); padding: 1px 6px; border-radius: 5px; }
+.g-row-v .sig-badge { vertical-align: middle; }
+
+/* 주석 이미지 */
+.annot { margin: 0 0 14px; }
+.annot-img {
+  position: relative; border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  background: var(--bg-2); line-height: 0;
+}
+.annot-img img { width: 100%; height: auto; display: block; }
+.marker {
+  position: absolute; transform: translate(-50%, -50%);
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--gold); color: #12140a; font-family: var(--mono); font-weight: 700;
+  font-size: 12px; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 3px rgba(11,12,15,0.85), 0 2px 8px rgba(0,0,0,0.5);
+  line-height: 0;
+}
+.annot figcaption { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-top: 8px; }
+
+.legend { margin: 0 0 8px; padding: 0; list-style: none; counter-reset: lg; display: flex; flex-direction: column; gap: 8px; }
+.legend li {
+  position: relative; padding-left: 34px; font-size: 13.5px; line-height: 1.6; color: var(--ink-2);
+  counter-increment: lg;
+}
+.legend li::before {
+  content: counter(lg); position: absolute; left: 0; top: 0;
+  width: 22px; height: 22px; border-radius: 50%; background: var(--gold-dim); color: var(--gold);
+  font-family: var(--mono); font-weight: 700; font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* 용어 사전 */
+.g-dl { margin: 0; }
+.g-dl dt { font-weight: 600; font-size: 14.5px; color: var(--ink); margin-top: 16px; }
+.g-dl dt:first-child { margin-top: 0; }
+.g-dl dd { margin: 5px 0 0; font-size: 13.5px; line-height: 1.68; color: var(--ink-2); }
+
+/* 인용 */
+.g-quote {
+  margin: 0; padding: 18px 20px; border-left: 3px solid var(--gold);
+  background: linear-gradient(90deg, rgba(242,193,78,0.06), transparent);
+  border-radius: 0 10px 10px 0; font-size: 14.5px; line-height: 1.8; color: var(--ink-2);
+}
+
+/* 경고 박스 */
+.g-warnbox {
+  margin: 24px 0 0; padding: 18px 20px; border: 1px solid #5a2b33;
+  background: #170f12; border-radius: 12px;
+}
+.g-warnbox h4 { margin: 0 0 10px; font-size: 14.5px; color: #f0b8c0; }
+.g-warnbox ul { margin: 0; padding-left: 18px; }
+.g-warnbox li { font-size: 13.5px; line-height: 1.7; color: var(--ink-2); margin-bottom: 6px; }
+
+.g-cta { margin: 32px 0 10px; text-align: center; }
+.tab-jump {
+  font-family: var(--sans); font-size: 13.5px; font-weight: 600; color: var(--gold);
+  background: var(--panel); border: 1px solid var(--gold-dim); border-radius: 999px;
+  padding: 10px 20px; cursor: pointer; transition: background 0.15s ease;
+}
+.tab-jump:hover { background: var(--panel-2); }

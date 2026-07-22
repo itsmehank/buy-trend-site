@@ -1,0 +1,37 @@
+name: deploy-pages
+
+# 프론트엔드(site/**) 변경을 main에 push하면 배치를 돌리지 않고 바로 Pages에 배포한다.
+# daily.yml은 데이터 배치 후 배포를 담당하고, 이 워크플로는 정적 변경(가이드·UI 등)만
+# 빠르게 반영한다. daily.yml이 봇 토큰으로 커밋한 데이터 push는 워크플로를 다시
+# 트리거하지 않으므로 이중 배포가 생기지 않는다.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
