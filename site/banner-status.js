@@ -3,7 +3,9 @@
 // 배너 상태 판정 — 브라우저/Node 공용 순수 함수.
 // 설계: docs/superpowers/specs/2026-07-22-banner-market-status-design.md
 
-const STALE_DAYS_LIMIT = 4; // 4 캘린더일 초과면 지연
+// 4일(24시간×4) 초과면 지연. 달력 날짜 차이가 아니라 built_at 이후 '경과 duration'
+// 기준 — 배치 실행 간 최대 공백(정상 2.40일, KR 실행 누락 시 3.00일) 계산과 같은 단위다.
+const STALE_DAYS_LIMIT = 4;
 
 const MARKET = {
   KR: { tz: "Asia/Seoul", open: 9 * 60, close: 15 * 60 + 30 },
