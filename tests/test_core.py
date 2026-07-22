@@ -1,9 +1,11 @@
 """수치 로직 단위 테스트 — EV, 최적 기간 선정(§2.4 검증사례), zone, 별점, 터치·돌파 정의."""
+import datetime as dt
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from pipeline import backtest, phrase, signals, stars, zone
+from pipeline import backtest, phrase, signals, stars, trading, zone
 from pipeline.rs import rs_percentiles, rs_raw
 
 
@@ -240,3 +242,29 @@ def test_phrase_box_and_nhigh():
     assert phrase.make_phrase("박스", "L", 63) == "박스돌파 장기 · 63일 보유"
     assert phrase.make_phrase("신고가", "ATH", 20) == "역대최고 돌파 · 20일 보유"
     assert phrase.make_phrase("신고가", "55", 10) == "55일신고가 돌파 · 10일 보유"
+
+
+# ── 완결 거래일 가드 (장중 미완결 봉 배제)
+
+def _utc(y, m, d, hh, mm):
+    return dt.datetime(y, m, d, hh, mm, tzinfo=dt.timezone.utc)
+
+
+def test_kr_intraday_excludes_today():
+    # 2026-07-22 11:48 KST (=02:48 UTC), KR 장중 → 완결일은 전일 07-21
+    assert trading.latest_complete_date("KR", _utc(2026, 7, 22, 2, 48)) == dt.date(2026, 7, 21)
+
+
+def test_kr_after_close_includes_today():
+    # 2026-07-22 16:30 KST (=07:30 UTC), 장 마감+버퍼 후 → 당일 07-22
+    assert trading.latest_complete_date("KR", _utc(2026, 7, 22, 7, 30)) == dt.date(2026, 7, 22)
+
+
+def test_us_intraday_excludes_today():
+    # 2026-07-22 14:00 ET (=18:00 UTC, EDT), US 장중 → 전일 07-21
+    assert trading.latest_complete_date("US", _utc(2026, 7, 22, 18, 0)) == dt.date(2026, 7, 21)
+
+
+def test_us_after_close_includes_today():
+    # 2026-07-22 17:00 ET (=21:00 UTC, EDT), 마감+버퍼 후 → 당일 07-22
+    assert trading.latest_complete_date("US", _utc(2026, 7, 22, 21, 0)) == dt.date(2026, 7, 22)

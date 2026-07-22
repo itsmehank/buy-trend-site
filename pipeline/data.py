@@ -38,8 +38,19 @@ def _history_start() -> dt.date:
     return dt.date.today() - dt.timedelta(days=int(config.HISTORY_YEARS * 365.25))
 
 
-def fetch_us(tickers: list[str], market: str = "us", chunk: int = 100) -> pd.DataFrame:
-    """yfinance 일괄 다운로드(수정주가) + 증분 캐시. market: 캐시 키(us/etf/bench)."""
+def _trim_asof(df: pd.DataFrame, asof: dt.date | None) -> pd.DataFrame:
+    """asof(완결 거래일) 이후의 미완결 봉 제거. asof=None이면 트림 안 함."""
+    if asof is None or df.empty:
+        return df
+    return df[df["date"] <= asof]
+
+
+def fetch_us(tickers: list[str], market: str = "us", chunk: int = 100,
+             asof: dt.date | None = None) -> pd.DataFrame:
+    """yfinance 일괄 다운로드(수정주가) + 증분 캐시. market: 캐시 키(us/etf/bench).
+
+    asof: 이 날짜 이후의 미완결 봉(장중 오늘 봉 등)을 캐시·반환에서 제외한다.
+    """
     cache = load_cache(market)
     last_dates = cache.groupby("ticker")["date"].max() if len(cache) else pd.Series(dtype="object")
     today = dt.date.today()
@@ -76,12 +87,14 @@ def fetch_us(tickers: list[str], market: str = "us", chunk: int = 100) -> pd.Dat
         log.info("US fetch %d/%d", min(i + chunk, len(todo)), len(todo))
     frames = [f for f in frames if len(f)]
     df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=COLS)
+    df = _trim_asof(df, asof)  # 미완결 봉 제거 후 캐시 (캐시 오염 방지)
     save_cache(market, df)
     return df[df["ticker"].isin(tickers)]
 
 
-def fetch_kr(tickers: list[str], market: str = "kr", pause: float = 0.2) -> pd.DataFrame:
-    """pykrx 수정주가 OHLCV + 증분 캐시."""
+def fetch_kr(tickers: list[str], market: str = "kr", pause: float = 0.2,
+             asof: dt.date | None = None) -> pd.DataFrame:
+    """pykrx 수정주가 OHLCV + 증분 캐시. asof 이후 미완결 봉 제외."""
     from pykrx import stock as krx
 
     cache = load_cache(market)
@@ -114,6 +127,7 @@ def fetch_kr(tickers: list[str], market: str = "kr", pause: float = 0.2) -> pd.D
             log.info("KR fetch %d/%d", i + 1, len(tickers))
     frames = [f for f in frames if len(f)]
     df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=COLS)
+    df = _trim_asof(df, asof)  # 장중 미완결 봉 제거 후 캐시
     save_cache(market, df)
     return df[df["ticker"].isin(tickers)]
 

@@ -18,7 +18,7 @@ import sys
 
 import pandas as pd
 
-from . import build, config, data, krx, universe
+from . import build, config, data, krx, trading, universe
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("run")
@@ -40,9 +40,11 @@ def run_us(now_iso: str, built: dict, regimes: dict, fresh: dict):
     universe.save_universe("us_stock", stocks)
     universe.save_universe("us_etf", etfs)
 
-    log.info("US stocks: %d, ETFs: %d — downloading prices", len(stocks), len(etfs))
-    sdf = data.fetch_us(stocks["ticker"].tolist(), market="us")
-    edf = data.fetch_us(etfs["ticker"].tolist(), market="etf")
+    asof = trading.latest_complete_date("US")
+    log.info("US stocks: %d, ETFs: %d — downloading prices (as-of %s)",
+             len(stocks), len(etfs), asof)
+    sdf = data.fetch_us(stocks["ticker"].tolist(), market="us", asof=asof)
+    edf = data.fetch_us(etfs["ticker"].tolist(), market="etf", asof=asof)
     s_frames = data.to_ticker_frames(sdf)
     e_frames = data.to_ticker_frames(edf)
 
@@ -66,7 +68,7 @@ def run_us(now_iso: str, built: dict, regimes: dict, fresh: dict):
         "sector_map": sector_map, "industry_map": industry_map,
         "category_map": {}, "mcap_map": mcap_map,
         "benchmark": "^GSPC", "market_s": regimes["US"],
-        "rs_asof": str(dt.date.today()),
+        "rs_asof": str(asof),
     }, built)
 
 
@@ -74,8 +76,9 @@ def run_kr(now_iso: str, built: dict, regimes: dict, fresh: dict, rate: float):
     log.info("── KR universe")
     uni = universe.kr_universe(rate)
     universe.save_universe("kr_stock", uni)
-    log.info("KR stocks: %d — downloading prices", len(uni))
-    kdf = data.fetch_kr(uni["ticker"].tolist(), market="kr")
+    asof = trading.latest_complete_date("KR")
+    log.info("KR stocks: %d — downloading prices (as-of %s)", len(uni), asof)
+    kdf = data.fetch_kr(uni["ticker"].tolist(), market="kr", asof=asof)
     frames = data.to_ticker_frames(kdf)
     name_map = dict(zip(uni["ticker"], uni["name"]))
     mcap_map = dict(zip(uni["ticker"], uni["market_cap_usd"]))
@@ -84,7 +87,7 @@ def run_kr(now_iso: str, built: dict, regimes: dict, fresh: dict, rate: float):
         "name_map": name_map, "sector_map": {}, "industry_map": {},
         "category_map": {}, "mcap_map": mcap_map,
         "benchmark": "^KS11", "market_s": regimes["KR"],
-        "rs_asof": str(dt.date.today()),
+        "rs_asof": str(asof),
     }, built)
 
 
