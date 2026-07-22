@@ -106,11 +106,21 @@ python -m pipeline.run --market all    # 둘 다
    저장소 **Settings → Pages → Build and deployment → Source**를 **"GitHub Actions"**로
    설정한다. (브랜치 방식이 아니라 Actions 방식)
 
-3. **Secrets 불필요 확인**
-   Settings → Secrets and variables → Actions 에 아무것도 추가하지 않아도 된다.
-   워크플로 권한은 `daily.yml`의 `permissions:` 블록에 선언돼 있다. 만약 push가
-   권한 오류로 실패하면 Settings → Actions → General → Workflow permissions 를
+3. **Secrets 설정** — 미국(US)·ETF는 **Secrets 없이** 동작한다. 다만 **한국(KR)**은
+   2026-02-27 KRX API 포맷 변경 이후 스냅샷 API(유니버스·시가총액)에 **로그인이
+   필수**가 됐다(pykrx [이슈 #276](https://github.com/sharebook-kr/pykrx/issues/276)).
+   KR을 갱신하려면 Settings → Secrets and variables → Actions → New repository secret 로
+   아래 2개를 추가한다:
+   - `KRX_ID` — data.krx.co.kr 로그인 ID
+   - `KRX_PW` — data.krx.co.kr 로그인 비밀번호
+
+   Secrets가 없으면 KR은 자동으로 건너뛰고(US만 갱신) 배너에 "KR 갱신 건너뜀"이 뜬다.
+   워크플로 권한은 `daily.yml`의 `permissions:` 블록에 선언돼 있다. push가 권한 오류로
+   실패하면 Settings → Actions → General → Workflow permissions 를
    **"Read and write permissions"**로 설정한다.
+
+   > 로컬 실행 시에는 저장소 루트에 `.env`(gitignore됨)를 만들어 `KRX_ID=...`,
+   > `KRX_PW=...` 두 줄을 넣으면 파이프라인이 자동으로 로그인한다.
 
 4. **첫 배치 수동 실행**
    **Actions 탭 → daily-buy-signals → Run workflow** 로 `workflow_dispatch`를 실행한다.

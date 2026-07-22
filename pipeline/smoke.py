@@ -102,7 +102,9 @@ def run() -> int:
         "rs_asof": str(dt.date.today()),
     }
     built = {"US": build.build_market("US", frames, meta_info, write_detail=True)}
-    fresh = {"price_us": True, "rs_us": True, "price_kr": False, "rs_kr": False}
+    fresh = {"price_us": True, "rs_us": True, "price_etf_us": True, "etf_bt_us": True,
+             "ma_signals": True, "box_stocks": True, "nhigh_stats": True,
+             "nhigh_signals": True}
     out = build.merge_and_write(built, ["US"], regimes, fresh, now_iso,
                                 write_detail=True)
 

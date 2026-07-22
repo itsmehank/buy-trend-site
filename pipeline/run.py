@@ -18,7 +18,7 @@ import sys
 
 import pandas as pd
 
-from . import build, config, data, universe
+from . import build, config, data, krx, universe
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("run")
@@ -122,9 +122,16 @@ def main(argv=None):
     do_us = args.market in ("us", "all")
     do_kr = args.market in ("kr", "all")
 
-    fresh = {"price_us": do_us, "price_kr": do_kr, "rs_us": do_us, "rs_kr": do_kr,
-             "ma_signals": True, "box_stocks": True, "nhigh_stats": True,
-             "nhigh_signals": True, "price_etf_us": do_us, "etf_bt_us": do_us}
+    # fresh: 이번 실행에서 갱신을 시도하는 시장의 키만 True로 둔다. 갱신하지 않는
+    # 시장의 키는 넣지 않아 merge_and_write가 직전 상태를 유지하게 한다(거짓 '지연' 방지).
+    # 실패/스킵 시 아래에서 해당 시장 키를 False로 덮어쓴다.
+    fresh = {"ma_signals": True, "box_stocks": True, "nhigh_stats": True,
+             "nhigh_signals": True}
+    if do_us:
+        fresh.update({"price_us": True, "rs_us": True,
+                      "price_etf_us": True, "etf_bt_us": True})
+    if do_kr:
+        fresh.update({"price_kr": True, "rs_kr": True})
 
     if do_us:
         try:
@@ -135,13 +142,18 @@ def main(argv=None):
             fresh["rs_us"] = False
 
     if do_kr:
-        try:
-            rate = data.usdkrw()
-            run_kr(now_iso, built, regimes, fresh, rate)
-            updated.append("KR")
-        except Exception as e:
-            log.error("KR build failed, keeping previous JSON: %s", e)
+        if not krx.ensure_login():
+            log.warning("KR 갱신 건너뜀 — KRX 로그인 자격증명 없음")
+            fresh["price_kr"] = False
             fresh["rs_kr"] = False
+        else:
+            try:
+                rate = data.usdkrw()
+                run_kr(now_iso, built, regimes, fresh, rate)
+                updated.append("KR")
+            except Exception as e:
+                log.error("KR build failed, keeping previous JSON: %s", e)
+                fresh["rs_kr"] = False
 
     out = build.merge_and_write(built, updated, regimes, fresh, now_iso,
                                 write_detail=True)

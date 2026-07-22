@@ -9,6 +9,7 @@ import pandas as pd
 import yfinance as yf
 
 from . import config
+from . import krx  # noqa: F401 — import 부작용(타임아웃 가드) 필요, pykrx보다 먼저
 
 log = logging.getLogger(__name__)
 

@@ -65,6 +65,12 @@ jobs:
             prices-
 
       - name: 배치 실행
+        env:
+          # KR 스냅샷 API(유니버스·시총)는 2026-02-27 KRX 포맷 변경 이후 로그인 필수.
+          # 저장소 Secrets에 KRX_ID/KRX_PW를 넣으면 KR이 갱신되고, 없으면 KR은
+          # 자동으로 건너뛴다(US는 로그인 불필요). pykrx 이슈 #276 참고.
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
         run: python -m pipeline.run --market "${{ steps.market.outputs.market }}"
 
       - name: 산출 JSON 커밋

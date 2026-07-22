@@ -9,3 +9,6 @@ cache/
 
 # OS
 .DS_Store
+
+# KRX 로그인 자격증명 (커밋 금지)
+.env

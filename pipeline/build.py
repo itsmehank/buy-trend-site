@@ -279,7 +279,10 @@ def merge_and_write(built: dict[str, dict], updated_markets: list[str],
     meta["built_at"] = now_iso
     meta["market_s"] = {config.BENCHMARKS[m]: regimes.get(m, False)
                         for m in ("KR", "US")}
-    meta["materials_fresh"] = fresh
+    # materials_fresh: 이번 실행에서 갱신한 시장의 값만 덮어쓰고, 갱신하지 않은
+    # 시장은 직전 상태를 유지한다(KR만 돌렸는데 US를 '지연'으로 오표시하지 않도록).
+    prev_fresh = existing["meta"].get("materials_fresh", {}) if existing else {}
+    meta["materials_fresh"] = {**prev_fresh, **fresh}
     meta["warnings"] = []
 
     # rows: 갱신 시장은 새 값, 나머지는 기존값 유지
@@ -300,31 +303,34 @@ def merge_and_write(built: dict[str, dict], updated_markets: list[str],
     meta["by_country"] = by_country
     meta["by_asset"] = by_asset
 
-    grand = sum(built[m]["grand_total"] for m in updated_markets)
-    grand += (meta.get("grand_total", 0) if not updated_markets else 0)
-    meta["grand_total"] = grand if updated_markets else meta.get("grand_total", 0)
-
-    # star 블록
+    # star 블록 + per-market 신호 수 (grand_total = 시장별 신호 수 합)
+    signals_by_market = {}
     for m in ("KR", "US"):
         if m in updated_markets:
             b = built[m]
+            signals_by_market[m] = b["grand_total"]
             meta["star"][m] = {
                 "stock_n": b["stock_n"], "★★★": b["star_counts"]["★★★"],
                 "★★": b["star_counts"]["★★"], "★": b["star_counts"]["★"],
                 "컷": 0, "lottery": 0, "ax3_unmeasured": 0, "ax6_nodata": 0,
+                "signals": b["grand_total"],
             }
             meta["star"]["rs_asof"][m] = b["rs_asof"]
         else:
-            meta["star"].setdefault(m, {})
+            prev = meta["star"].setdefault(m, {})
+            # 직전 신호 수 유지, 없으면 해당 시장 row 수로 근사
+            signals_by_market[m] = prev.get("signals", by_country.get(m, 0))
+    meta["grand_total"] = sum(signals_by_market.values())
 
-    # 지연 경고 ([명세서] "KR RS 지연" 재현)
+    # 지연 경고 — 병합된 materials_fresh 기준(이번에 갱신 안 한 시장의 직전 상태 반영)
+    mf = meta["materials_fresh"]
     for m in ("KR", "US"):
-        rs_key = f"rs_{m.lower()}"
-        if not fresh.get(rs_key, True):
-            label = {"KR": "KR RS 지연 — 신호가 묵었을 수 있음",
-                     "US": "US RS 지연 — 신호가 묵었을 수 있음"}[m]
-            meta["warnings"].append(label)
-        if not regimes.get(m, True):
+        if not mf.get(f"rs_{m.lower()}", True):
+            meta["warnings"].append(
+                {"KR": "KR RS 지연 — 신호가 묵었을 수 있음",
+                 "US": "US RS 지연 — 신호가 묵었을 수 있음"}[m])
+        # 시장 레짐 경고는 이번에 갱신한 시장에 대해서만(현재 지수 상태 기준)
+        if m in updated_markets and not regimes.get(m, True):
             meta["warnings"].append(
                 f"{config.BENCHMARKS[m]} 시장 레짐 하락(약세) — 신호 신뢰도 주의")
 
