@@ -307,6 +307,212 @@
           평균 <b>+40.3%</b>였습니다. <b>★★★</b>은 과열·급등 같은 위험 감점 요인이 없다는 뜻입니다.
         </blockquote>
 
+        <!-- 신호별 전략 -->
+        <h3 class="g-h3"><span class="g-num">G</span> 신호 3종은 각각 어떤 전략인가</h3>
+        <p class="g-p">
+          카드에 붙은 <span class="sig-badge sig-이평">이평</span>
+          <span class="sig-badge sig-박스">박스</span>
+          <span class="sig-badge sig-신고가">신고가</span> 는 단순한 분류가 아니라
+          <b>서로 다른 매수 전략</b>입니다. 같은 종목이라도 어떤 전략으로 잡혔느냐에 따라
+          사는 자리와 근거가 다릅니다.
+        </p>
+
+        <div class="g-rows">
+          <div class="g-row">
+            <div class="g-row-k">세 전략의 공통점</div>
+            <div class="g-row-v">
+              셋 다 <b>"강한 종목을 먼저 고르고, 그다음 살 자리를 기다린다"</b>는 순서입니다.
+              <b>RS 90 이상</b>(시장 상위 10%)을 통과한 종목만 후보가 되므로,
+              <b>싸졌다고 약한 종목을 줍는 전략은 하나도 없습니다.</b>
+              파는 시점도 셋 다 같은 방식입니다 — 감이 아니라
+              <b>백테스트가 뽑은 최적 보유기간만큼 들고 있다가 파는</b> 기계적 규칙입니다.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">한 종목에 여러 전략이 걸리면</div>
+            <div class="g-row-v">
+              한 종목이 <b>동시에 여러 전략의 조건</b>을 만족하는 일은 흔합니다(예: 신고가를 뚫으면서
+              단기 이평선에도 붙어 있는 경우). 이때 카드에는 <b>과거 기대값(EV)이 가장 좋았던 전략
+              하나만</b> 표시됩니다. 그러니 <b>"이평"이라고 적혀 있어도 그 종목에 다른 신호가
+              없었다는 뜻은 아닙니다</b> — 가장 성적이 좋았던 근거가 그거였다는 뜻입니다.
+            </div>
+          </div>
+        </div>
+
+        <!-- 이평 -->
+        <h4 class="g-strat-h"><span class="sig-badge sig-이평">이평</span> 눌림목 — 오르던 종목이 잠깐 쉴 때 산다</h4>
+        <div class="g-rows">
+          <div class="g-row">
+            <div class="g-row-k">노리는 상황</div>
+            <div class="g-row-v">
+              추세가 살아 있는 종목은 쭉 오르기만 하지 않고 <b>이동평균선까지 눌렸다가 다시 오르는</b>
+              움직임을 반복합니다. 이 전략은 <b>오른 뒤를 쫓아가지 않고, 눌린 자리에서 삽니다.</b>
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">매수 조건</div>
+            <div class="g-row-v">
+              종가가 이동평균선의 <b>−2%~+3% 안</b>에 들어왔을 때. 다만 그냥 떨어진 걸 잡으면
+              안 되므로 <b>추세가 살아 있다는 조건</b>을 같이 겁니다:<br>
+              · <b>장기(L)</b> — 종가가 <span class="g-mono">SMA200</span> 위 <b>그리고</b>
+              <span class="g-mono">SMA50</span>이 <span class="g-mono">SMA200</span> 위<br>
+              · <b>단기(S)</b> — 종가가 <span class="g-mono">SMA50</span> 위
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">배지 읽는 법</div>
+            <div class="g-row-v">
+              <span class="g-mono">EMA40 장기 근접</span> = EMA40 이동평균선에 <b>장기(L) 추세 조건</b>을
+              만족한 채로 눌렸다는 뜻입니다. 이평선은 <b>SMA 10·20·30·40·50·60</b>과
+              <b>EMA 10·21·30·40·50·60</b> 총 12개를 각각 장기/단기로 보므로 <b>24가지 조합</b>을
+              검사하고, 그중 <b>과거 성적(EV)이 가장 좋았던 조합</b>을 카드에 씁니다.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">매수 구간 · 표본</div>
+            <div class="g-row-v">
+              구간은 <b>이평선 −2%~+3%</b>. 즉 이평선에 딱 붙은 자리에서만 삽니다.
+              성적표의 <b>터치수</b>는 과거에 이 조건으로 눌린 횟수인데,
+              <b>구간에 새로 들어온 날만 1회</b>로 셉니다(며칠 머물러도 1회, 벗어났다 다시 와야 새 1회).
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">깨지는 경우</div>
+            <div class="g-row-v">
+              눌림이 아니라 <b>추세 자체가 꺾이는</b> 경우입니다. 종가가 이평선 아래로 더 내려가고
+              장기 조건(SMA200 위)마저 무너지면 전제가 사라집니다.
+            </div>
+          </div>
+        </div>
+
+        <!-- 박스 -->
+        <h4 class="g-strat-h"><span class="sig-badge sig-박스">박스</span> 박스권 돌파 — 오래 눌려 있던 게 위로 뚫릴 때 산다</h4>
+        <div class="g-rows">
+          <div class="g-row">
+            <div class="g-row-k">노리는 상황</div>
+            <div class="g-row-v">
+              주가가 좁은 폭에서 <b>오래 횡보하면 팔 사람이 그동안 다 팔고</b> 물량이 정리됩니다.
+              그 <b>천장을 위로 뚫는 순간</b> 저항이 얇아져 새 상승이 시작된다고 보는 전략입니다.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">박스의 정의</div>
+            <div class="g-row-v">
+              직전 기간의 <b>저점 대비 고점이 15% 이내</b>로만 벌어졌을 때 "박스"로 봅니다.<br>
+              (계산: <span class="g-mono">(최고가 − 최저가) ÷ 최저가 ≤ 0.15</span>)<br>
+              · <b>장기(L)</b> — 직전 <b>60거래일</b>이 그 조건<br>
+              · <b>단기(S)</b> — 직전 <b>20거래일</b>이 그 조건
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">매수 조건</div>
+            <div class="g-row-v">
+              <b>종가가 박스 천장(그 기간의 최고가) 위로 마감</b>할 때가 돌파입니다.
+              그리고 <b>돌파 후 5거래일 이내</b>일 때만 목록에 올라옵니다 —
+              <b>뚫린 직후에 사는 전략</b>이지, 이미 한참 오른 뒤에 따라 사는 게 아닙니다.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">매수 구간 · 표본</div>
+            <div class="g-row-v">
+              구간은 <b>박스 천장 ~ +5%</b>. 천장보다 5% 넘게 오른 뒤엔 사지 않습니다.
+              성적표의 <b>돌파수</b>는 과거 돌파 횟수인데, 한 번 뚫은 뒤엔
+              <b>박스가 다시 만들어져야</b> 다음 돌파로 셉니다(찔끔찔끔 넘나든 걸 여러 번으로 부풀리지 않음).
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">배지 읽는 법</div>
+            <div class="g-row-v">
+              <span class="g-mono">박스돌파 단기 · 252일 보유</span> = <b>20거래일 박스</b>를 뚫었고,
+              과거 성적이 가장 좋았던 보유기간이 <b>252일(1년)</b>이었다는 뜻입니다.
+              "장기"면 60거래일 박스입니다.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">왜 이렇게 드문가</div>
+            <div class="g-row-v">
+              오늘 350종목 중 <b>박스는 1개뿐</b>입니다. 15% 이내로 좁게 횡보 + RS 90 이상 +
+              돌파 후 5일 이내 + 현재가가 구간 안, 이 조건이 <b>동시에</b> 맞아야 해서 드물게 나옵니다.
+              안 보인다고 고장난 게 아닙니다.
+            </div>
+          </div>
+        </div>
+
+        <!-- 신고가 -->
+        <h4 class="g-strat-h"><span class="sig-badge sig-신고가">신고가</span> 신고가 돌파 — 가장 비쌀 때 산다</h4>
+        <div class="g-rows">
+          <div class="g-row">
+            <div class="g-row-k">노리는 상황</div>
+            <div class="g-row-v">
+              신고가(종가 기준)에서는 <b>그 위에서 물린 사람이 사실상 없습니다.</b> 본전 오면 팔겠다는 매물이
+              없으니 위로 갈 때 저항이 가장 얇다고 보는 전략입니다.
+              <b>"싸게 사라"의 정반대</b>로, 일부러 가장 비싼 자리에서 삽니다.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">3가지 종류</div>
+            <div class="g-row-v">
+              <b>역대최고(ATH)</b> — 보유 데이터(<b>최대 15년</b>) 내 최고 종가 돌파 ·
+              <b>55일</b> — 최근 55거래일 최고 종가 돌파 ·
+              <b>20일</b> — 최근 20거래일 최고 종가 돌파.
+              아래로 갈수록 자주 나오고 의미는 약합니다.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">매수 조건</div>
+            <div class="g-row-v">
+              <b>종가가 그 기간의 직전 최고 종가를 넘어선 날</b>이 돌파입니다. 박스와 마찬가지로
+              <b>돌파 후 5거래일 이내</b>일 때만 목록에 올라옵니다. 넘어선 뒤 계속 신고가를 갱신하는
+              날들은 <b>새 돌파로 세지 않습니다</b>(처음 넘은 날만 1회).
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">배지 읽는 법</div>
+            <div class="g-row-v">
+              <span class="g-mono">역대최고 돌파 · 126일 보유</span> = ATH를 뚫었고 최적 보유기간이
+              126일(6개월)이라는 뜻입니다. <span class="g-mono">55일신고가 돌파</span>,
+              <span class="g-mono">20일신고가 돌파</span>도 같은 형식입니다.
+            </div>
+          </div>
+          <div class="g-row">
+            <div class="g-row-k">매수 구간</div>
+            <div class="g-row-v">
+              <b>돌파선 ~ +5%</b>. 박스와 같습니다 — 뚫린 가격에서 5% 안쪽에서만 삽니다.
+            </div>
+          </div>
+        </div>
+
+        <!-- 비교표 -->
+        <h4 class="g-strat-h">한눈에 비교</h4>
+        <div style="overflow-x:auto">
+        <table class="bt-table g-strat-table">
+          <thead><tr>
+            <th>구분</th><th>이평 눌림목</th><th>박스 돌파</th><th>신고가 돌파</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>사는 자리</td><td>떨어졌을 때</td><td>천장 뚫을 때</td><td>최고가 뚫을 때</td></tr>
+            <tr><td>매수 구간</td><td>이평선 −2%~+3%</td><td>천장 ~ +5%</td><td>돌파선 ~ +5%</td></tr>
+            <tr><td>기다림 vs 추격</td><td>기다렸다 산다</td><td>뚫린 직후 산다</td><td>뚫린 직후 산다</td></tr>
+            <tr><td>시간 제한</td><td>없음(구간 안이면)</td><td>돌파 후 5일 이내</td><td>돌파 후 5일 이내</td></tr>
+            <tr><td>표본 이름</td><td>터치수</td><td>돌파수</td><td>표본수</td></tr>
+            <tr><td>오늘 종목 수</td><td>309</td><td>1</td><td>40</td></tr>
+          </tbody>
+        </table>
+        </div>
+        <div class="bt-note">종목 수는 2026-07-22 배치 기준이며 매일 달라집니다. 박스가 0개인 날도 흔합니다.</div>
+
+        <!-- 알려주지 않는 것 -->
+        <div class="g-strat-caveat">
+          <h4>이 사이트가 알려주지 <b>않는</b> 것</h4>
+          <p>
+            세 전략 모두 <b>손절 규칙이 없습니다.</b> 성적표의 승률·평균손실은
+            "샀다가 <b>정해진 기간을 다 채우고</b> 팔았다면"을 가정한 숫자라,
+            중간에 손실이 커졌을 때 어떻게 할지는 계산에 들어 있지 않습니다.
+            평균손실 칸이 <b>그 전략이 틀렸을 때 실제로 겪은 손실 폭</b>이니,
+            그 정도를 감당할 수 있는지 먼저 보고 판단하세요.
+          </p>
+        </div>
+
         <!-- 주의 -->
         <div class="g-warnbox">
           <h4>⚠ 꼭 기억하세요</h4>

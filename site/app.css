@@ -344,6 +344,21 @@ body {
 .g-warnbox ul { margin: 0; padding-left: 18px; }
 .g-warnbox li { font-size: 13.5px; line-height: 1.7; color: var(--ink-2); margin-bottom: 6px; }
 
+/* 신호별 전략 섹션 */
+.g-strat-h {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  font-size: 15.5px; margin: 26px 0 10px; letter-spacing: -0.02em;
+}
+.g-strat-table { margin-top: 4px; }
+.g-strat-table th:first-child, .g-strat-table td:first-child { color: var(--ink-3); white-space: nowrap; }
+.g-strat-table th, .g-strat-table td { text-align: left; }
+.g-strat-caveat {
+  margin: 22px 0 0; padding: 16px 18px; border: 1px solid var(--line);
+  border-left: 3px solid var(--gold); background: var(--panel); border-radius: 0 10px 10px 0;
+}
+.g-strat-caveat h4 { margin: 0 0 8px; font-size: 14px; color: var(--gold); }
+.g-strat-caveat p { margin: 0; font-size: 13.5px; line-height: 1.7; color: var(--ink-2); }
+
 .g-cta { margin: 32px 0 10px; text-align: center; }
 .tab-jump {
   font-family: var(--sans); font-size: 13.5px; font-weight: 600; color: var(--gold);
