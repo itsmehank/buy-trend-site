@@ -6,6 +6,29 @@ import numpy as np
 from . import config
 
 
+def independent_count(event_idx: np.ndarray, hold: int, n_closes: int) -> int:
+    """겹치지 않는 보유구간의 최대 개수 (표본 n의 '실질' 증거량).
+
+    n은 신호가 뜬 날마다 1씩 세므로 구간이 겹친다. 예: 1/5와 1/8에 뜬 신호를
+    252일 보유로 재면 252일 중 250일이 같은 기간이라, 표본 2개가 알려주는
+    사실은 사실상 하나다. 겹침을 제거하면 그 구간에서 실제로 독립적으로
+    관측된 횟수가 나온다 — 15년(3780거래일)치가 있어도 252일 보유의 독립
+    표본은 14회가 상한이다(마지막 구간은 252일 뒤 종가가 없어 완결 불가).
+
+    끝나는 시점이 이른 것부터 채택하는 greedy로, 최대 개수를 준다.
+    valid 기준은 hold_stats와 같다(미래 데이터가 없는 이벤트는 제외).
+    """
+    valid = sorted(int(i) for i in np.asarray(event_idx, dtype=int)
+                   if i + hold < n_closes)
+    cnt = 0
+    next_free = -1
+    for i in valid:
+        if i >= next_free:
+            cnt += 1
+            next_free = i + hold
+    return cnt
+
+
 def hold_stats(closes: np.ndarray, event_idx: np.ndarray, hold: int) -> dict | None:
     """이벤트 발생일 종가 매수 → hold 거래일 뒤 종가 매도의 성적.
 
@@ -36,6 +59,8 @@ def hold_stats(closes: np.ndarray, event_idx: np.ndarray, hold: int) -> dict | N
         "avg_loss": round(avg_loss, 2) if avg_loss is not None else None,
         "pl_ratio": pl_ratio,
         "n": n,
+        # 표시 전용. 최적 기간 선정(select_optimal)은 명세서 ✅대로 n만 쓴다.
+        "n_eff": independent_count(event_idx, hold, len(closes)),
     }
 
 
@@ -46,7 +71,7 @@ def backtest_signal(closes: np.ndarray, event_idx, holds: list[int]) -> list[dic
         s = hold_stats(closes, event_idx, h)
         if s is None:
             s = {"hold": h, "win_rate": None, "avg_win": None,
-                 "avg_loss": None, "pl_ratio": None, "n": 0}
+                 "avg_loss": None, "pl_ratio": None, "n": 0, "n_eff": 0}
         rows.append(s)
     return rows
 

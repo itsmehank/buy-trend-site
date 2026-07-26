@@ -110,7 +110,11 @@ function renderBanner() {
 function renderFoot(data) {
   const m = data.meta || {};
   const el = document.getElementById("footMeta");
-  el.textContent = `built ${fmtDate(m.built_at)} · 신호 ${m.grand_total ?? "?"}건 → ${data.total ?? state.rows.length}티커 · RS≥${m.rs_min} · 표본≥${m.min_sample}`;
+  const bt = window.BannerStatus
+    ? window.BannerStatus.btWindowText(m.backtest_window)
+    : "";
+  el.textContent = `built ${fmtDate(m.built_at)} · 신호 ${m.grand_total ?? "?"}건 → ${data.total ?? state.rows.length}티커 · RS≥${m.rs_min} · 표본≥${m.min_sample}`
+    + bt;
 }
 
 // ── 필터 + 정렬
@@ -269,20 +273,23 @@ function renderTable(r, detail) {
     const maPer = ma.slice(3);
     const key = `${filt}|${maType}|${maPer}`;
     periods = (detail.ma.stats[key] || []).map((x) => ({
-      hold: x.period, win: x.win_rate, aw: x.avg_win, al: x.avg_loss, pl: x.pl_ratio, n: x.touch_count,
+      hold: x.period, win: x.win_rate, aw: x.avg_win, al: x.avg_loss, pl: x.pl_ratio,
+      n: x.touch_count, neff: x.n_eff,
     }));
     title = `${ma} ${FILT_LABEL[filt]} · 이평 눌림목 8기간 성적표`;
     sampleLabel = "터치수";
   } else if (r.signal === "박스") {
     periods = (detail.box.periods_all[r.detail] || []).map((x) => ({
-      hold: x.period, win: x.win_rate, aw: x.avg_win, al: x.avg_loss, pl: x.pl_ratio, n: x.cnt,
+      hold: x.period, win: x.win_rate, aw: x.avg_win, al: x.avg_loss, pl: x.pl_ratio,
+      n: x.cnt, neff: x.n_eff,
     }));
     title = `박스돌파 ${FILT_LABEL[r.detail]} 8기간 성적표`;
     sampleLabel = "돌파수";
   } else {
     const entry = detail.nhigh.entries[r.detail] || { holds: [] };
     periods = entry.holds.map((x) => ({
-      hold: x.hold, win: x.win_rate, aw: x.avg_win, al: x.avg_loss, pl: x.pl_ratio, n: x.n,
+      hold: x.hold, win: x.win_rate, aw: x.avg_win, al: x.avg_loss, pl: x.pl_ratio,
+      n: x.n, neff: x.n_eff,
     }));
     title = `${NHIGH_TITLE[r.detail]} · 신고가 8기간 성적표`;
     sampleLabel = "표본수";
@@ -291,13 +298,22 @@ function renderTable(r, detail) {
   const rowsHtml = periods.map((p) => {
     const opt = p.hold === r.hold_period;
     const noLoss = p.al == null;
+    // 승률의 95% 구간은 독립 표본수(n_eff) 기준. n_eff가 없는 옛 detail JSON
+    // (아직 재생성되지 않은 시장)에서는 구간을 표시하지 않는다.
+    const ci = window.BannerStatus
+      ? window.BannerStatus.wilsonInterval(p.win, p.neff)
+      : null;
+    const ciHtml = ci
+      ? `<span class="ci">${ci.lo.toFixed(0)}~${ci.hi.toFixed(0)}</span>`
+      : "";
     return `<tr class="${opt ? "optimal" : ""}">
       <td>${opt ? "★ " : ""}${p.hold}일</td>
-      <td>${p.win == null ? "—" : p.win.toFixed(1)}</td>
+      <td>${p.win == null ? "—" : p.win.toFixed(1)}${ciHtml}</td>
       <td class="pos">${p.aw == null ? "—" : "+" + p.aw.toFixed(1)}</td>
       <td class="neg">${noLoss ? "—" : p.al.toFixed(1)}</td>
       <td>${noLoss ? "—" : p.pl.toFixed(2)}</td>
       <td>${p.n ?? "—"}</td>
+      <td class="neff">${p.neff ?? "—"}</td>
     </tr>`;
   }).join("");
 
@@ -308,11 +324,15 @@ function renderTable(r, detail) {
     <div class="table-title">${title}</div>
     <table class="bt-table">
       <thead><tr>
-        <th>보유기간</th><th>승률</th><th>평균이익</th><th>평균손실</th><th>손익비</th><th>${sampleLabel}</th>
+        <th>보유기간</th><th>승률</th><th>평균이익</th><th>평균손실</th><th>손익비</th>
+        <th>${sampleLabel}</th><th title="겹치지 않는 보유구간 수">독립</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
-    <div class="bt-note">${note} · ★ = 최적 보유기간(표본≥${state.meta.min_sample} 중 EV 최대) · 손실 없는 기간은 —</div>`;
+    <div class="bt-note">${note} · ★ = 최적 보유기간(표본≥${state.meta.min_sample} 중 EV 최대) · 손실 없는 기간은 —
+      <br>독립 = 겹치지 않는 보유구간 수. 표본은 신호가 뜬 날마다 세므로 구간이 겹치는데,
+      장기일수록 겹침이 심해 실제 증거는 표본수보다 훨씬 적다.
+      <br>승률 아래 작은 수 = 독립 표본 기준 95% 구간(근사). 구간이 넓을수록 그 승률을 믿기 어렵다.</div>`;
 }
 
 // ── 컨트롤 이벤트

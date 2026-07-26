@@ -215,6 +215,12 @@ body {
 .bt-table tr.optimal td { background: rgba(242,193,78,0.09); color: var(--ink); font-weight: 600; }
 .bt-table tr.optimal td:first-child { color: var(--gold); position: relative; }
 .bt-table .pos { color: var(--up); } .bt-table .neg { color: var(--down); }
+/* 독립 표본수 — 표본수의 보조 지표라 한 단계 죽여 표시 */
+.bt-table .neff { color: var(--ink-3); }
+.bt-table tr.optimal .neff { color: var(--ink-2); }
+/* 승률 신뢰구간 — 승률 아래 보조 줄. 열을 늘리면 모바일에서 표가 깨진다 */
+.bt-table .ci { display: block; font-size: 9.5px; color: var(--ink-3); font-weight: 400; margin-top: 1px; }
+.bt-table tr.optimal .ci { color: var(--ink-2); }
 .bt-note { font-size: 10.5px; color: var(--ink-3); margin-top: 8px; font-family: var(--mono); line-height: 1.6; }
 .bt-loading { font-family: var(--mono); font-size: 12px; color: var(--ink-3); padding: 12px 0; }
 

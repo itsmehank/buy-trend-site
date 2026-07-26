@@ -28,7 +28,31 @@ REQUIRED_ROW_FIELDS = [
 REQUIRED_META_FIELDS = [
     "built_at", "market_s", "materials_fresh", "warnings", "rs_min",
     "min_sample", "by_country", "by_asset", "grand_total", "star",
+    "backtest_window",
 ]
+
+
+def _validate_fresh_rows(rows: list[dict]) -> list[str]:
+    """이번 실행이 새로 만든 row만 검사하는 항목.
+
+    `bars`는 REQUIRED_ROW_FIELDS에 넣을 수 없다. merge_and_write는 이번에
+    갱신하지 않은 시장의 row를 기존 JSON에서 그대로 이어받는데, 그 row들은
+    이 필드가 생기기 전에 만들어져 `bars`가 없기 때문이다(해당 시장의 다음
+    배치에서 채워진다). 그래서 갓 만든 row에 대해서만 확인한다.
+    """
+    errs = []
+    for r in rows:
+        t = r.get("ticker", "?")
+        if "bars" not in r:
+            errs.append(f"{t}: 신규 row에 bars 누락")
+        elif not isinstance(r["bars"], int) or r["bars"] <= 0:
+            errs.append(f"{t}: bars가 양의 정수가 아님 ({r['bars']!r})")
+        if "n_eff" not in r:
+            errs.append(f"{t}: 신규 row에 n_eff 누락")
+        elif not (0 < r["n_eff"] <= r["n"]):
+            # 겹침을 제거한 값이므로 n보다 클 수 없다
+            errs.append(f"{t}: n_eff가 범위 밖 (n_eff={r['n_eff']}, n={r['n']})")
+    return errs
 
 
 def _validate(out: dict) -> list[str]:
@@ -108,7 +132,7 @@ def run() -> int:
     out = build.merge_and_write(built, ["US"], regimes, fresh, now_iso,
                                 write_detail=True)
 
-    errs = _validate(out)
+    errs = _validate(out) + _validate_fresh_rows(built["US"]["rows"])
     log.info("생성된 rows: %d, grand_total: %d", out["count"], out["meta"]["grand_total"])
     if errs:
         log.error("스키마 검증 실패 %d건:", len(errs))

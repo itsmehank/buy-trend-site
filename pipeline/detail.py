@@ -12,11 +12,12 @@ def _full_hold_row(closes: np.ndarray, event_idx: np.ndarray, hold: int) -> dict
     event_idx = np.asarray(event_idx, dtype=int)
     valid = event_idx[event_idx + hold < len(closes)]
     if len(valid) == 0:
-        return {"hold": hold, "n": 0, "win_rate": None, "avg_ret": None,
+        return {"hold": hold, "n": 0, "n_eff": 0, "win_rate": None, "avg_ret": None,
                 "median_ret": None, "avg_win": None, "avg_loss": None, "pl_ratio": None}
     rets = closes[valid + hold] / closes[valid] - 1.0
     base = backtest.hold_stats(closes, event_idx, hold)
-    return {"hold": hold, "n": base["n"], "win_rate": base["win_rate"],
+    return {"hold": hold, "n": base["n"], "n_eff": base["n_eff"],
+            "win_rate": base["win_rate"],
             "avg_ret": round(float(rets.mean() * 100), 2),
             "median_ret": round(float(np.median(rets) * 100), 2),
             "avg_win": base["avg_win"], "avg_loss": base["avg_loss"],
@@ -42,7 +43,8 @@ def ma_by_ticker(ticker: str, df: pd.DataFrame, benchmark: str, market_s: bool) 
         rows = backtest.backtest_signal(c_np, s["events"], config.HOLDS_MA)
         stats[key] = [{"period": r["hold"], "win_rate": r["win_rate"],
                        "avg_win": r["avg_win"], "avg_loss": r["avg_loss"],
-                       "pl_ratio": r["pl_ratio"], "touch_count": r["n"]} for r in rows]
+                       "pl_ratio": r["pl_ratio"], "touch_count": r["n"],
+                       "n_eff": r["n_eff"]} for r in rows]
     return {
         "ticker": ticker, "found": True,
         "last_close": round(float(c_np[-1]), 4),
@@ -66,7 +68,8 @@ def box_by_ticker(ticker: str, df: pd.DataFrame) -> dict:
         rows = backtest.backtest_signal(c_np, events, config.HOLDS_BOX)
         return [{"filter": filt, "period": r["hold"], "win_rate": r["win_rate"],
                  "avg_win": r["avg_win"], "avg_loss": r["avg_loss"],
-                 "pl_ratio": r["pl_ratio"], "cnt": r["n"]} for r in rows]
+                 "pl_ratio": r["pl_ratio"], "cnt": r["n"],
+                 "n_eff": r["n_eff"]} for r in rows]
 
     periods_all, periods_vol2x = {}, {}
     for filt, min_days in (("L", config.BOX_MIN_DAYS_L), ("S", config.BOX_MIN_DAYS_S)):

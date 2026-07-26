@@ -53,3 +53,77 @@ test("stale이 intraday보다 우선", () => {
   const r = bannerStatus({ market: "KR", builtAt: "2026-07-10T02:00:00Z", now: new Date("2026-07-22T02:00:00Z") });
   assert.strictEqual(r.state, "stale");
 });
+
+// ── 백테스트 구간 표기 (표본수를 해석하려면 몇 년치인지 알아야 한다)
+const { btWindowText } = require("../site/banner-status.js");
+
+const BW = {
+  years: 15,
+  US: { start: "2011-07-26", end: "2026-07-24", bars_median: 3776 },
+  KR: { start: "2014-04-28", end: "2026-07-24", bars_median: 2999 },
+};
+
+test("btWindowText는 구간과 시장별 실측 거래일·연수를 표기", () => {
+  assert.strictEqual(
+    btWindowText(BW),
+    " · 백테스트 2011-07~2026-07(US 3,776일≈15.0년 · KR 2,999일≈11.9년)");
+});
+
+// 설정값 15년을 그대로 쓰면 KR(실제 11.9년)을 오해하게 된다 — 실측만 쓴다
+test("btWindowText는 설정값 years를 표기에 쓰지 않는다", () => {
+  const out = btWindowText(BW);
+  assert.ok(!out.includes("15년 2011"), "설정 연수를 헤드라인에 쓰면 안 됨");
+  assert.ok(out.includes("11.9년"), "KR 실측 연수가 드러나야 함");
+});
+
+test("btWindowText는 한 시장만 있어도 그 시장만 표기", () => {
+  assert.strictEqual(
+    btWindowText({ years: 15, US: BW.US, KR: {} }),
+    " · 백테스트 2011-07~2026-07(US 3,776일≈15.0년)");
+});
+
+// 첫 배치 전에 프론트만 배포되면 meta에 키가 없다 — 이때 화면이 깨지면 안 된다
+test("btWindowText는 데이터가 없으면 빈 문자열", () => {
+  assert.strictEqual(btWindowText(undefined), "");
+  assert.strictEqual(btWindowText(null), "");
+  assert.strictEqual(btWindowText({}), "");
+  assert.strictEqual(btWindowText({ years: 15, US: {}, KR: {} }), "");
+});
+
+test("btWindowText는 필드가 반쯤 빈 시장을 건너뛴다", () => {
+  assert.strictEqual(btWindowText({ years: 15, US: { start: "2011-07-26" }, KR: {} }), "");
+});
+
+// ── 승률 신뢰구간 (Wilson) — 표본수는 반드시 n_eff 기준
+const { wilsonInterval } = require("../site/banner-status.js");
+
+const r1 = (x) => Math.round(x * 10) / 10;
+
+test("wilsonInterval은 표본이 적을수록 구간이 넓어진다", () => {
+  // 같은 승률 96.7%라도 표본수에 따라 정밀도가 다르다
+  const wide = wilsonInterval(96.67, 15);   // 독립 표본 기준
+  const narrow = wilsonInterval(96.67, 60); // 겹친 표본수를 그대로 쓴 경우
+  assert.ok(wide.hi - wide.lo > narrow.hi - narrow.lo,
+    "표본이 적으면 구간이 더 넓어야 함");
+  assert.strictEqual(r1(narrow.lo), 88.6);
+  assert.strictEqual(r1(narrow.hi), 99.1);
+});
+
+test("wilsonInterval은 0~100 밖으로 나가지 않는다", () => {
+  const perfect = wilsonInterval(100, 5);
+  assert.ok(perfect.hi <= 100 && perfect.lo >= 0);
+  const zero = wilsonInterval(0, 5);
+  assert.ok(zero.lo >= 0 && zero.hi <= 100);
+});
+
+test("wilsonInterval은 표본 1개면 사실상 판단 불가 수준으로 넓다", () => {
+  const one = wilsonInterval(100, 1);
+  assert.ok(one.hi - one.lo > 75, `표본 1개 구간이 ${one.hi - one.lo}로 너무 좁음`);
+});
+
+test("wilsonInterval은 데이터가 없으면 null", () => {
+  assert.strictEqual(wilsonInterval(null, 15), null);
+  assert.strictEqual(wilsonInterval(96.67, 0), null);
+  assert.strictEqual(wilsonInterval(96.67, null), null);
+  assert.strictEqual(wilsonInterval(96.67, undefined), null);
+});

@@ -285,3 +285,114 @@ def test_actual_asof_uses_last_bar_not_expected_date():
 def test_actual_asof_falls_back_when_no_frames():
     from pipeline.build import actual_asof
     assert actual_asof({}, "2026-07-25") == "2026-07-25"
+
+
+# ── 백테스트 구간 표기 (표본수 해석용)
+
+def _span_frame(start: dt.date, n: int) -> pd.DataFrame:
+    return pd.DataFrame({"date": [start + dt.timedelta(days=i) for i in range(n)]})
+
+
+def test_history_span_reports_actual_range_and_bar_spread():
+    from pipeline.build import history_span
+    frames = {
+        "OLD": _span_frame(dt.date(2011, 7, 1), 100),   # 오래된 종목
+        "MID": _span_frame(dt.date(2015, 1, 1), 50),
+        "NEW": _span_frame(dt.date(2024, 1, 1), 10),    # 최근 상장
+    }
+    s = history_span(frames)
+    assert s["start"] == "2011-07-01"                   # 가장 이른 첫 봉
+    assert s["end"] == "2024-01-10"                     # 가장 늦은 마지막 봉
+    assert (s["bars_min"], s["bars_median"], s["bars_max"]) == (10, 50, 100)
+    assert s["tickers"] == 3
+
+
+def test_history_span_ignores_empty_frames():
+    from pipeline.build import history_span
+    frames = {
+        "A": _span_frame(dt.date(2020, 1, 1), 5),
+        "EMPTY": pd.DataFrame({"date": []}),
+    }
+    s = history_span(frames)
+    assert s["tickers"] == 1 and s["bars_min"] == 5
+
+
+def test_history_span_empty_when_no_data():
+    from pipeline.build import history_span
+    assert history_span({}) == {}
+
+
+# ── smoke: bars는 '이번에 만든 row'에만 요구한다
+# (갱신 안 한 시장의 row는 기존 JSON에서 그대로 이어받아 bars가 없다)
+
+def test_bars_not_required_on_carried_over_rows():
+    from pipeline.smoke import REQUIRED_ROW_FIELDS
+    assert "bars" not in REQUIRED_ROW_FIELDS
+
+
+def test_fresh_rows_must_carry_bars_and_n_eff():
+    from pipeline.smoke import _validate_fresh_rows
+    ok = {"ticker": "A", "bars": 3776, "n": 60, "n_eff": 8}
+    assert _validate_fresh_rows([ok]) == []
+
+    assert _validate_fresh_rows([{"ticker": "B", "n": 60, "n_eff": 8}]) \
+        == ["B: 신규 row에 bars 누락"]
+    assert _validate_fresh_rows([{"ticker": "C", "bars": 3776, "n": 60}]) \
+        == ["C: 신규 row에 n_eff 누락"]
+
+    # n_eff는 겹침을 제거한 값이라 n을 넘을 수 없다
+    over = _validate_fresh_rows([{**ok, "ticker": "D", "n": 60, "n_eff": 61}])
+    assert len(over) == 1 and "범위 밖" in over[0]
+    assert len(_validate_fresh_rows([{**ok, "ticker": "E", "bars": 0},
+                                     {**ok, "ticker": "F", "n_eff": 0}])) == 2
+
+
+# ── 독립 표본수 (겹치는 보유구간 제거) — 표시 전용
+
+def test_independent_count_removes_overlap():
+    from pipeline.backtest import independent_count
+    # 0,1,2일에 신호 → 10일 보유면 구간이 거의 겹쳐 독립은 1회뿐
+    assert independent_count(np.array([0, 1, 2]), 10, 100) == 1
+    # 0,10,20 → 정확히 맞닿으면 겹치지 않음
+    assert independent_count(np.array([0, 10, 20]), 10, 100) == 3
+    # 0,9,10 → 9는 0의 구간(0~10)과 겹쳐 탈락, 10은 채택
+    assert independent_count(np.array([0, 9, 10]), 10, 100) == 2
+
+
+def test_independent_count_bounded_by_history_length():
+    from pipeline.backtest import independent_count
+    # 3780거래일(15년)에서 매일 신호가 떠도 252일 보유 독립 표본은 14회가 상한.
+    # 나눗셈 근사(3780/252=15)가 아니라 14인 이유: 마지막 구간은 252일 뒤
+    # 종가가 없어 완결되지 않으므로 표본에서 빠진다(hold_stats와 같은 기준).
+    every_day = np.arange(3780)
+    assert independent_count(every_day, 252, 3780) == 14
+    assert independent_count(every_day, 2, 3780) == 1889
+
+
+def test_independent_count_excludes_events_without_future():
+    from pipeline.backtest import independent_count
+    # 95일차 이벤트는 10일 뒤 데이터가 없어 hold_stats와 동일하게 제외
+    assert independent_count(np.array([0, 95]), 10, 100) == 1
+    assert independent_count(np.array([]), 10, 100) == 0
+
+
+def test_hold_stats_reports_n_eff_below_n():
+    closes = np.linspace(100, 200, 500)
+    events = np.arange(0, 200)          # 200개 이벤트, 전부 겹침
+    s = backtest.hold_stats(closes, events, 100)
+    assert s["n"] == 200                # 표시되는 표본수
+    assert s["n_eff"] == 2              # 실제 독립 관측
+    assert s["n_eff"] < s["n"]
+
+
+# n_eff를 선정에 쓰면 명세서 ✅(min_sample=20 + EV 최대)를 깨뜨린다 — 표시 전용 고정
+def test_select_optimal_ignores_n_eff():
+    rows = [
+        {"hold": 2, "win_rate": 50.0, "avg_win": 4.0, "avg_loss": -2.0,
+         "pl_ratio": 2.0, "n": 25, "n_eff": 25},
+        # 독립 표본은 1개뿐이지만 n=25라 명세서상 후보 자격이 있고 EV가 더 높다
+        {"hold": 252, "win_rate": 90.0, "avg_win": 40.0, "avg_loss": -2.0,
+         "pl_ratio": 20.0, "n": 25, "n_eff": 1},
+    ]
+    best = backtest.select_optimal(rows)
+    assert best["hold"] == 252, "선정은 n_eff와 무관하게 n 기준이어야 한다"

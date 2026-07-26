@@ -177,6 +177,11 @@ def build_market(market: str, frames: dict[str, pd.DataFrame], meta_info: dict,
             "avg_loss": b["avg_loss"],
             "pl_ratio": b["pl_ratio"],
             "n": b["n"],
+            # n에서 겹치는 보유구간을 제거한 '실질' 표본수(표시 전용).
+            "n_eff": b["n_eff"],
+            # 이 종목이 실제로 보유한 거래일 수. n(표본수)이 몇 년치에서 나온
+            # 값인지 판단하는 분모 — 상장이 늦으면 HISTORY_YEARS보다 짧다.
+            "bars": int(len(df)),
             "rs": rs,
             "phrase": phrase.make_phrase(rep["signal"], detail_str, b["hold"]),
             "category": meta_info["category_map"].get(t) if asset == "etf" else None,
@@ -209,6 +214,7 @@ def build_market(market: str, frames: dict[str, pd.DataFrame], meta_info: dict,
         "stock_n": sum(1 for r in rows if r["asset"] == "stock"),
         "etf_n": sum(1 for r in rows if r["asset"] == "etf"),
         "rs_asof": actual_asof(frames, meta_info["rs_asof"]),
+        "span": history_span(frames),
         "detail": detail_out,
         "group_rs": group_rs,
     }
@@ -224,6 +230,27 @@ def actual_asof(frames: dict, fallback: str) -> str:
     if not last_dates:
         return fallback
     return str(max(last_dates))
+
+
+def history_span(frames: dict) -> dict:
+    """백테스트에 실제로 쓰인 가격 이력 구간 (성적표 표본수 해석용).
+
+    config.HISTORY_YEARS는 '요청한' 구간이고, 상장이 늦은 종목은 그보다 짧다.
+    8기간 성적표의 표본수가 몇 년치에서 나온 값인지 알 수 없으면 신뢰도를
+    판단할 수 없으므로, 실제 구간과 티커별 봉 수 분포를 meta로 노출한다.
+    """
+    live = [df for df in frames.values() if len(df)]
+    if not live:
+        return {}
+    bars = sorted(len(df) for df in live)
+    return {
+        "start": str(min(df["date"].iloc[0] for df in live)),
+        "end": str(max(df["date"].iloc[-1] for df in live)),
+        "bars_min": bars[0],
+        "bars_median": bars[len(bars) // 2],
+        "bars_max": bars[-1],
+        "tickers": len(bars),
+    }
 
 
 def _group_rs(frames, rs_pct, meta_info) -> dict:
@@ -269,6 +296,7 @@ def _empty_meta(now_iso: str) -> dict:
         "star": {"KR": {}, "US": {},
                  "rs_source": "rs_scores.pct (live)",
                  "rs_asof": {}, "star_cut": {"KR": 4}},
+        "backtest_window": {"years": config.HISTORY_YEARS, "KR": {}, "US": {}},
     }
 
 
@@ -315,12 +343,21 @@ def merge_and_write(built: dict[str, dict], updated_markets: list[str],
     meta["by_country"] = by_country
     meta["by_asset"] = by_asset
 
+    # backtest_window: 기존 JSON에는 이 키가 없으므로 setdefault로 방어한다
+    # (merge_and_write는 디스크의 meta를 이어받고, _empty_meta는 파일이 없을
+    #  때만 쓰이므로 키를 가정하면 첫 배치에서 KeyError로 죽는다).
+    bw = meta.setdefault("backtest_window", {"KR": {}, "US": {}})
+    bw["years"] = config.HISTORY_YEARS
+
     # star 블록 + per-market 신호 수 (grand_total = 시장별 신호 수 합)
     signals_by_market = {}
     for m in ("KR", "US"):
+        bw.setdefault(m, {})
         if m in updated_markets:
             b = built[m]
             signals_by_market[m] = b["grand_total"]
+            if b.get("span"):
+                bw[m] = b["span"]
             meta["star"][m] = {
                 "stock_n": b["stock_n"], "★★★": b["star_counts"]["★★★"],
                 "★★": b["star_counts"]["★★"], "★": b["star_counts"]["★"],
