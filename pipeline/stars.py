@@ -14,11 +14,18 @@ MINOR_TAGS = {TAG_VOL_Q4, TAG_WICK, TAG_RS_HOT}
 
 
 def volatility_60d(closes: np.ndarray) -> float | None:
-    """60일 일간수익률 표준편차. 데이터 부족 시 None."""
+    """60일 일간수익률 표준편차. 데이터 부족하거나 값이 비유한이면 None.
+
+    창 안에 종가 0이 있으면 NaN이 된다. 그대로 두면 build의
+    vol_q4_cut = np.quantile(...)이 NaN이 되고, compute_tags의
+    `vol >= vol_q4_cut` 비교가 항상 False라 TAG_VOL_Q4가 전 종목에서
+    조용히 사라진다(별점이 실제보다 후해진다).
+    """
     if len(closes) < config.VOL_WINDOW + 1:
         return None
     rets = np.diff(closes[-(config.VOL_WINDOW + 1):]) / closes[-(config.VOL_WINDOW + 1):-1]
-    return float(np.std(rets, ddof=1))
+    v = float(np.std(rets, ddof=1))
+    return v if np.isfinite(v) else None
 
 
 def upper_wick_days(opens, highs, closes, lookback=config.WICK_LOOKBACK) -> int:
@@ -35,11 +42,13 @@ def surge_flags(closes: np.ndarray) -> bool:
     """직전 20일 수익률 ≥ +50% 또는 60일 내 최대 일간수익률 ≥ +20%."""
     if len(closes) < 21:
         return False
+    # 종가 0이 분모면 inf가 되어 무조건 급등으로 오판한다 — 비유한값은 판정하지 않는다.
     ret20 = closes[-1] / closes[-21] - 1.0
-    if ret20 >= config.SURGE_20D:
+    if np.isfinite(ret20) and ret20 >= config.SURGE_20D:
         return True
     tail = closes[-(config.VOL_WINDOW + 1):]
     daily = np.diff(tail) / tail[:-1]
+    daily = daily[np.isfinite(daily)]
     return bool(len(daily) and daily.max() >= config.SURGE_1D_MAX)
 
 

@@ -396,3 +396,62 @@ def test_select_optimal_ignores_n_eff():
     ]
     best = backtest.select_optimal(rows)
     assert best["hold"] == 252, "선정은 n_eff와 무관하게 n 기준이어야 한다"
+
+
+# ── 비유한값(NaN/inf) 방어 — 종가 0/NaN이 만드는 4개 실패 경로
+
+def _zero_at(n: int, pos: int) -> np.ndarray:
+    """길이 n의 정상 시계열에서 pos 위치만 종가 0으로 만든 배열."""
+    c = np.linspace(100.0, 200.0, n).copy()
+    c[pos] = 0.0
+    return c
+
+
+def test_rs_raw_none_when_lookback_close_is_zero():
+    # 룩백 시점 종가가 0이면 inf가 된다. inf는 죽지 않고 rank 최상위가 되어
+    # 그 종목이 RS=100으로 상위 10%에 무조건 진입한다 — 반드시 제외해야 한다.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        assert rs_raw(_zero_at(300, 300 - 1 - 63)) is None
+
+
+def test_rs_raw_none_when_last_close_is_nan():
+    c = np.linspace(100.0, 200.0, 300).copy()
+    c[-1] = np.nan
+    with np.errstate(divide="ignore", invalid="ignore"):
+        assert rs_raw(c) is None
+
+
+def test_rs_percentiles_survives_after_guard():
+    # 가드가 없으면 NaN이 흘러들어 int(round(NaN))에서 배치 전체가 죽었다.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        raws = {"OK": rs_raw(np.linspace(100.0, 200.0, 300)),
+                "BAD": rs_raw(_zero_at(300, 300 - 1 - 63))}
+    raws = {t: v for t, v in raws.items() if v is not None}
+    pct = rs_percentiles(raws)
+    assert "BAD" not in pct and pct["OK"] == 100
+
+
+def test_volatility_60d_none_when_window_has_zero_close():
+    # NaN이 남으면 vol_q4_cut이 NaN이 되어 TAG_VOL_Q4가 전 종목에서 사라진다.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        assert stars.volatility_60d(_zero_at(100, 50)) is None
+
+
+def test_vol_q4_cut_stays_finite_with_broken_ticker():
+    with np.errstate(divide="ignore", invalid="ignore"):
+        vols = [stars.volatility_60d(np.linspace(100.0, 200.0, 100)),
+                stars.volatility_60d(_zero_at(100, 50))]
+    valid = [v for v in vols if v is not None]
+    assert len(valid) == 1 and np.isfinite(np.quantile(valid, 0.75))
+
+
+def test_surge_flags_not_fooled_by_zero_close():
+    # 20일 전 종가가 0이면 inf >= 0.5 라 급등으로 오판했다.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        assert stars.surge_flags(_zero_at(100, 100 - 21)) is False
+        assert stars.surge_flags(_zero_at(100, 100 - 30)) is False
+
+
+def test_surge_flags_still_detects_real_surge():
+    c = np.concatenate([np.full(80, 100.0), np.full(20, 160.0)])   # +60%
+    assert stars.surge_flags(c) is True

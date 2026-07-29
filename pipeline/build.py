@@ -118,6 +118,14 @@ def build_market(market: str, frames: dict[str, pd.DataFrame], meta_info: dict,
     """
     # 1) RS 백분위 (시장 내)
     raw = {t: rs_raw(df["close"].to_numpy()) for t, df in frames.items()}
+    # rs_raw가 None을 주는 경우는 (a) 이력 부족 (b) 종가 0/NaN으로 값이 비유한.
+    # (b)는 데이터 이상 신호이므로 조용히 넘기지 않고 건수를 남긴다.
+    need = max(config.RS_WEIGHTS) + 1
+    anomalies = [t for t, v in raw.items()
+                 if v is None and len(frames[t]) >= need]
+    if anomalies:
+        log.warning("RS 계산 불가(종가 0/NaN 추정) %d종목 제외: %s",
+                    len(anomalies), anomalies[:10])
     raw = {t: v for t, v in raw.items() if v is not None}
     rs_pct = rs_percentiles(raw)
 
