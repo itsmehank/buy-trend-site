@@ -18,7 +18,9 @@ description: Use when 이 저장소(buy-copy)에서 새 매수 전략 가설을 
 - 가격 데이터 재다운로드 금지 — 로컬 `cache/*.parquet`만 사용
 - `git push` 금지 — 커밋만 하고 push는 사용자 판단
 - 동시 실행 금지 — 다른 세션이 백테스트 중이면(작업 중인 미커밋 registry 변경 발견 시) 중단하고 사용자에게 알림
-- 검토 sub-agent는 **Sonnet**(`model: sonnet`) 고정. 본 세션이 Opus가 아니면 시작 시 "Opus 세션 권장"을 한 줄 안내만 하고 진행
+- 검토 sub-agent는 **Opus**(`model: opus`) 고정 — 3종((a)가설 게이트·(b)코드+결과·(c)문서) 모두. 세션 모델이 무엇이든 검토는 Opus로 띄운다 (근거: PROTOCOL §6)
+- 검토는 **반드시 sub-agent로** 실행한다. 본 세션이 직접 검토하면 독립성이 없어 게이트가 무력해진다
+- 본 세션이 Opus가 아니면 시작 시 "Opus 세션 권장"을 한 줄 안내만 하고 진행
 
 ## 인자 모드
 
@@ -41,7 +43,7 @@ description: Use when 이 저장소(buy-copy)에서 새 매수 전략 가설을 
 일봉 종가 기준 명세, **사전 판정 기준**(PROTOCOL §3), 데이터 기준일, 난수 시드.
 
 ### 3. 가설 게이트 (최대 3회)
-Agent 도구(`model: sonnet`)로 독립 검토를 돌린다. 프롬프트에 명시할 것:
+Agent 도구(`model: opus`)로 독립 검토를 돌린다. 프롬프트에 명시할 것:
 - `docs/analysis/PROTOCOL.md` §4-(a) 체크리스트로 검토하라
 - `registry.md` 전체·`jail.md`와 직접 대조하라 (파일 경로 전달)
 - 반환: 통과/미통과 + 항목별 사유
@@ -56,15 +58,17 @@ Agent 도구(`model: sonnet`)로 독립 검토를 돌린다. 프롬프트에 명
   (`docs/analysis/btlib/`: loading·entries·exits·engine·metrics·regime·liquidity·costs).
   새 계산 로직이 필요하면 스크립트 안에 작성하되 문서에 이유를 남긴다.
 - KR·US 양 시장 모두 실행 (PROTOCOL §3 — 한 시장 통과는 "부분 지지").
-- 실행: 저장소 루트에서 `.venv/bin/python docs/analysis/backtests/scripts/<slug>.py`
+- 실행: 저장소 루트에서
+  `PYTHONPATH=.:docs/analysis .venv/bin/python docs/analysis/backtests/scripts/<slug>.py`
+  (`PYTHONPATH`에 두 경로가 모두 있어야 `pipeline`과 `btlib`을 import할 수 있다)
 - btlib를 수정했다면 `regression_check.py`를 다시 통과시켜야 한다.
 
 ### 5. 코드 + 결과 검토 (1회)
-Agent(`model: sonnet`)에 스크립트 경로·실행 출력·PROTOCOL §4-(b) 체크리스트를 주고
+Agent(`model: opus`)에 스크립트 경로·실행 출력·PROTOCOL §4-(b) 체크리스트를 주고
 검토. 문제 발견 → 수정 후 재실행 (검토 자체는 1회, 수정·재실행은 제한 없음).
 
 ### 6. 아카이브 문서 완성 + 검토 (1회)
-2번 초안에 결과·판정·한계·재현 방법을 채워 완성 → Agent(`model: sonnet`)가
+2번 초안에 결과·판정·한계·재현 방법을 채워 완성 → Agent(`model: opus`)가
 PROTOCOL §4-(c)로 검토 → 지적 반영.
 
 ### 7. 기록 갱신
