@@ -391,6 +391,46 @@ def cmd_run():
           "\n  부호가 시장 간 일치하는지, 문헌 값과 자릿수가 맞는지만 읽는다.")
 
 
+def cmd_verdict():
+    """**통합 표본 판정** (PROTOCOL §3 개정 2026-08-11, 사용자 승인).
+
+    판정 규칙 — 양 시장 교집합이 아니라 **월별 차분을 이어붙인 통합 표본**.
+    시장별 추정치는 임계 없이 병기한다(과적합 방어 대체 장치).
+    """
+    print("=" * 100)
+    print("[통합 표본 판정] PROTOCOL §3 개정본 · 검정력 기준 50%")
+    print("  주 판정 = 통합 표본 · 시장별은 임계 없이 병기(과적합 확인용)")
+    print("=" * 100)
+    series = {}
+    for m in ("kr", "us"):
+        cost = 0.0014 if m == "kr" else 0.0005
+        P = build_panel(m)
+        cfg = MARKET_CFG[m]
+        bmap = regime.bull_map(loading.load_bench(m), sma=SMA_BENCH)
+        bull = np.array([bmap.get(d, False) for d in P["dates"]])
+        base = run_arm(P, bull, cfg, None, cost)
+        for part, label, _ in PARTS:
+            arm = run_arm(P, bull, cfg, part, cost)
+            series.setdefault(part, {})[m] = arm["net"] - base["net"]
+    k = len(PARTS)
+    crit = _N.inv_cdf(1 - 0.05 / (2 * k))
+    print(f"\n다중비교: {k}개 부품 · Bonferroni α=0.05/{k} → |t| > {crit:.3f}\n")
+    print(f"{'부품':<26}{'통합 평균':>10}{'통합 t':>9}{'KR':>9}{'US':>9}"
+          f"{'부호일치':>9}  판정")
+    for part, label, _ in PARTS:
+        d = np.concatenate([series[part]["kr"], series[part]["us"]])
+        mu = float(np.mean(d))
+        t = mu / (np.std(d, ddof=1) / np.sqrt(len(d)))
+        mk, mu_ = float(np.mean(series[part]["kr"])), float(np.mean(series[part]["us"]))
+        agree = "✓" if (mk > 0) == (mu_ > 0) else "✗"
+        if abs(t) > crit:
+            v = "**채택**" if t > 0 else "**기각**(문헌 반대)"
+        else:
+            v = "측정 불가"
+        print(f"{label:<26}{mu:>+10.4f}{t:>9.2f}{mk:>+9.4f}{mu_:>+9.4f}{agree:>9}  {v}")
+    print("\n※ 비유의는 '측정 불가'다. **'효과 없음'이 아니다**(PROTOCOL §3.1-7-나).")
+
+
 def selftest():
     assert abs(K_MDE - 2.801585) < 1e-6
 
@@ -477,5 +517,7 @@ if __name__ == "__main__":
         cmd_power()
     elif arg == "--run":
         cmd_run()
+    elif arg == "--verdict":
+        cmd_verdict()
     else:
         print(__doc__)
