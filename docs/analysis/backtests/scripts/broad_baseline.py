@@ -133,7 +133,7 @@ def month_end_indices(dates: np.ndarray, start_i: int) -> list[int]:
             if v >= start_i]
 
 
-def universe(P, i: int, cfg: dict) -> np.ndarray:
+def universe(P, i: int, cfg: dict, n_override: int | None = None) -> np.ndarray:
     px = P["close"][i]
     base = np.isfinite(px) & (px > 0) & (P["bars"][i] >= MIN_BARS)
     if not base.any():
@@ -144,7 +144,7 @@ def universe(P, i: int, cfg: dict) -> np.ndarray:
     u = base & np.isfinite(dvm)
     if not u.any():
         return np.array([], dtype=int)
-    keep = min(int(cfg["universe_n"]), int(u.sum()))
+    keep = min(int(n_override or cfg["universe_n"]), int(u.sum()))
     thr = np.sort(dvm[u])[::-1][keep - 1]
     u &= dvm >= thr
     cand = np.flatnonzero(u)
@@ -209,6 +209,25 @@ def weights(P, i: int, sel: np.ndarray, part: str | None) -> np.ndarray:
                 break
             out[room] += excess * out[room] / out[room].sum()
         return out / out.sum() if out.sum() > 0 else w
+    if part == "dvw":                        # 후보 A — 거래대금 가중
+        dv = P["dollar_vol"][max(0, i - DV_WIN + 1):i + 1][:, sel]
+        with np.errstate(all="ignore"):
+            dvm = np.nanmedian(dv, axis=0)
+        if not np.isfinite(dvm).any() or np.nansum(dvm) <= 0:
+            return w
+        out = np.where(np.isfinite(dvm), dvm, 0.0)
+        out = out / out.sum()
+        for _ in range(50):                  # 종목당 상한 2% (집중 방지)
+            over = out > 0.02
+            if not over.any():
+                break
+            ex = (out[over] - 0.02).sum()
+            out[over] = 0.02
+            room = ~over
+            if not room.any() or out[room].sum() <= 0:
+                break
+            out[room] += ex * out[room] / out[room].sum()
+        return out / out.sum()
     if part == "expo":                                  # H-022
         sig = P["ivol"][i]
         if not np.isfinite(sig) or sig <= 0:
@@ -227,8 +246,15 @@ def run_arm(P, bull, cfg, part: str | None, cost: float = 0.0) -> dict:
     held: set[int] = set()
     prev: dict[int, float] = {}
     rets, net, holds, expo, turns = [], [], [], [], []
+    prev_u: set[int] = set()
     for a, b in zip(rebs[:-1], rebs[1:]):
-        u = universe(P, a, cfg)
+        n_ov = cfg["universe_n"] // 2 if part == "u200" else None
+        u = universe(P, a, cfg, n_ov)
+        if part == "delay" and prev_u:       # 후보 C — 신규 편입 1개월 지연
+            u = np.array([j for j in u if int(j) in prev_u], dtype=int)
+            if len(u) == 0:
+                u = universe(P, a, cfg)
+        prev_u = set(int(x) for x in universe(P, a, cfg, n_ov))
         if len(u) == 0:
             rets.append(0.0)
             net.append(0.0)
@@ -241,7 +267,7 @@ def run_arm(P, bull, cfg, part: str | None, cost: float = 0.0) -> dict:
             sel = np.array(sorted(uset & held), dtype=int)   # 기존 보유 ∩ 유니버스
             if len(sel) == 0:
                 sel = u
-        w = weights(P, a, sel, part)
+        w = weights(P, a, sel, None if part in ("u200", "delay") else part)
         held = set(int(x) for x in sel)
         holds.append(held)
         expo.append(float(w.sum()))
@@ -292,13 +318,30 @@ def run_power(market: str) -> list[dict]:
     bull = np.array([bmap.get(d, False) for d in P["dates"]])
     base = run_arm(P, bull, cfg, None)
     out = []
-    for part, hid in (("max", "H-020"), ("beta", "H-021"), ("expo", "H-022"),
-                      ("trend", "후보-추세"), ("mom", "후보-모멘텀"), ("nh", "후보-낙폭")):
+    for part, hid in (("dvw", "후보A-거래대금가중"), ("u200", "후보B-유니버스절반"),
+                      ("delay", "후보C-편입1개월지연")):
         arm = run_arm(P, bull, cfg, part)
         d = arm["rets"] - base["rets"]
         se = float(np.std(d, ddof=1) / np.sqrt(len(d))) if len(d) > 1 else np.nan
         ov = [len(a & e) / max(len(e), 1) for a, e in zip(arm["holds"], base["holds"]) if e]
-        if part in ("trend", "mom", "nh"):               # 평균 제외 비중 실측
+        if part in ("u200", "delay"):                    # 보유 집합 변화 비중
+            ch = []
+            for aa, ee in zip(arm["holds"], base["holds"]):
+                if ee:
+                    ch.append(1.0 - len(aa & ee) / len(ee))
+            frac = float(np.mean(ch)) if ch else np.nan
+        elif part == "dvw":                              # 액티브 셰어
+            acts = []
+            st = max(int(np.argmax(np.nanmax(P["bars"], axis=1) >= MIN_BARS)),
+                     SMA_BENCH, BETA_WIN, 1)
+            for aa in month_end_indices(P["dates"], st)[:-1]:
+                uu = universe(P, aa, cfg)
+                if len(uu) == 0:
+                    continue
+                acts.append(float(np.abs(weights(P, aa, uu, "dvw")
+                                         - weights(P, aa, uu, None)).sum() / 2))
+            frac = float(np.mean(acts)) if acts else np.nan
+        elif part in ("trend", "mom", "nh"):             # 평균 제외 비중 실측
             fr = []
             start = max(int(np.argmax(np.nanmax(P["bars"], axis=1) >= MIN_BARS)),
                         SMA_BENCH, BETA_WIN, 1)
