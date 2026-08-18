@@ -24,7 +24,7 @@
 판정은 PROTOCOL §3 개정판(2026-08-12) — **6종 추정량이 갈리면 측정 불가**.
 
   PYTHONPATH=.:docs/analysis .venv/bin/python -W ignore \
-    docs/analysis/backtests/scripts/turn_of_the_month.py --selftest | --power
+    docs/analysis/backtests/scripts/turn_of_the_month.py --selftest | --power | --run | --audit
 
 **--power 는 SE·표본·전략 회전율만 출력한다. 평균·t·부호는 출력 경로가 없다**
 (PROTOCOL §3.1-2 — 점추정치를 보면 사전등록이 무효가 된다).
@@ -204,7 +204,10 @@ def weight_path(turns: list[dict], n_days: int) -> np.ndarray:
         e = t["entry_pit"]
         if e is None:
             continue
-        w[e:t["exit"] + 1] = 1.0
+        # **진입일 종가에 산다 → 그날 수익은 못 번다.** 보유 구간은 e+1 ~ exit,
+        # 즉 Day +1·+2·+3 뿐이다. **PIT 전략은 Day −1 수익을 구조적으로 못 잡는다**
+        # (잡으려면 Day −2 종가에 들어가야 하고 그건 더 이른 미래 정보가 필요하다).
+        w[e + 1:t["exit"] + 1] = 1.0
     return w
 
 
@@ -292,6 +295,213 @@ def cmd_power():
         print(f"        비용 {t['cost_pct']:.4f}%p/월 (연 {t['cost_annual']:.2f}%p)")
 
 
+def type_m(e_star: float, se: float, crit: float, n: int = 100_000,
+           seed: int = 20260818) -> float:
+    """Type M = E[ |x| | 유의 ] / e*  — 사전등록 §3.6 절차 그대로."""
+    rng = np.random.default_rng(seed)
+    x = rng.normal(e_star, se, n)
+    sig = np.abs(x) > crit * se
+    return float(np.abs(x[sig]).mean() / e_star) if sig.any() else float("nan")
+
+
+def rom_diffs(S: dict, key: str) -> pd.Series:
+    """견고성 — 대조군을 원문 `Other Days` 대신 **월 나머지 전부(ROM)** 로.
+
+    Kim(2022) 의 정의다. **주 판정이 아니다**(사전등록 §3.7).
+    """
+    r = S[key]
+    mk = pd.PeriodIndex(S["dates"], freq="M")
+    groups: dict = {}
+    for i, p in enumerate(mk):
+        groups.setdefault(p, []).append(i)
+    months = sorted(groups)
+    vals, mo = [], []
+    for k in range(1, len(months)):
+        prev, cur = groups[months[k - 1]], groups[months[k]]
+        if len(prev) < 10 or len(cur) < 10:
+            continue
+        tom = [prev[-1]] + cur[:TOM_POST]
+        # **직전 turn 의 Day +1·+2·+3(= prev[0:3])을 대조군에서 뺀다.**
+        # 넣으면 대조군에 TOM 일이 섞여(turn 당 3.00일) 차가 0쪽으로 끌린다 (§4-(b) 지적).
+        rom = prev[TOM_POST:-1] + cur[TOM_POST:]
+        a, b = r[tom], r[rom]
+        a, b = a[np.isfinite(a)], b[np.isfinite(b)]
+        if len(a) < 4 or len(b) < 12:
+            continue
+        vals.append(a.mean() - b.mean())
+        mo.append(months[k])
+    return pd.Series(vals, index=pd.PeriodIndex(mo, freq="M"))
+
+
+def dm1_series(S: dict, key: str) -> tuple[pd.Series, pd.Series]:
+    """견고성 — **Day −1** (사전등록 §3.7).
+
+    사전등록이 약속한 것은 **Day −1 의 평균 일간수익 수준**이다(원문 보고량:
+    KR 0.38 · US EW 0.33). **차(Day −1 − Other)는 원문이 보고하지 않는 검정**이라
+    부가로만 낸다 (§4-(b) 지적 5).
+
+    반환: (수준 계열, 차 계열)
+    """
+    r = S[key]
+    lv, df, mo = [], [], []
+    for t in classify_turns(S["dates"]):
+        a, b = r[[t["d_minus1"]]], r[t["other"]]
+        a, b = a[np.isfinite(a)], b[np.isfinite(b)]
+        if len(a) < 1 or len(b) < OTHER_MIN:
+            continue
+        lv.append(a.mean()); df.append(a.mean() - b.mean()); mo.append(t["month"])
+    ix = pd.PeriodIndex(mo, freq="M")
+    return pd.Series(lv, index=ix), pd.Series(df, index=ix)
+
+
+def cmd_run():
+    PC = _pc()
+    print("=" * 104)
+    print("[H-031] Turn-of-the-Month — McConnell & Xu (2008) 원문 형태")
+    print("  판정 지표: 월 경계별 (TOM 4일 평균 일간수익 − Other 16일 평균), 단위 %p/일")
+    print(f"  판정: 통합 표본 · 가족 {FAMILY}칸 → |t| > {K_CRIT:.4f}"
+          f" · **6종 갈리면 측정 불가**(PROTOCOL §3) · direction=+1")
+    print("  ⚠️ 매매를 수반하지 않는 측정이다. **채택은 실행 가능한 전략을 의미하지 않는다.**")
+    print("=" * 104)
+
+    cells = (("① 지수 (KR ^KS11 · US ^GSPC)", "idx", LIT_IDX),
+             ("② EW 유니버스", "ew", LIT_EW))
+    results = {}
+    for tag, key, lit in cells:
+        ser = {}
+        print(f"\n{'─'*104}\n[{tag}]")
+        for mk, S in _series().items():
+            s, m = turn_diffs(S, key)
+            ser[mk] = s
+            mu = float(s.mean())
+            print(f"  {mk.upper()}: n={m['n']} ({s.index[0]}~{s.index[-1]})"
+                  f" · 평균 {mu:+.4f}%p/일 (연환산 약 {mu*252:+.1f}%p)"
+                  f" · 문헌 {lit[mk]:+.2f}")
+        est = PC.all_estimates(ser)
+        v, votes, agree = PC.robust_verdict(est, K_CRIT, family=FAMILY,
+                                            direction=LIT_DIR)
+        vt, votes_t, agree_t = PC.robust_verdict(est, K_CRIT, use_t=True,
+                                                 family=FAMILY, direction=LIT_DIR)
+        print(f"\n  통합 n={est['n']} · ρ={est['rho']:+.4f}"
+              f" · **평균 {est['mu']:+.4f}%p/일**")
+        for k in PC.VOTERS:
+            print(f"    {k:<10} SE {est[k]:.4f}  t {est['mu']/est[k]:+.4f}  → {votes[k]}")
+        print(f"    naive      SE {est['naive']:.4f}  t {est['mu']/est['naive']:+.4f}"
+              f"  (투표 안 함)")
+        ses = {k: est[k] for k in PC.VOTERS}
+        worst = max(ses, key=lambda k: ses[k])
+        n_kr, n_us = len(ser["kr"]), len(ser["us"])
+        e_star = (n_kr * lit["kr"] + n_us * lit["us"]) / (n_kr + n_us)
+        tm = type_m(e_star, est[worst], K_CRIT)
+        print(f"    **판정: {v}** (6종 일치={agree}) · t(df) 판정: {vt} (일치={agree_t})")
+        print(f"    Type M = {tm:.3f}배 (e*={e_star:.4f}, SE 최대={est[worst]:.4f})")
+        results[tag] = (v, est, ser)
+
+    print(f"\n{'='*104}\n[견고성 — 판정을 대체하지 않는다]")
+    for tag, key, lit in (("① 지수", "idx", LIT_IDX), ("② EW", "ew", LIT_EW)):
+        ser = {mk: rom_diffs(S, key) for mk, S in _series().items()}
+        est = PC.all_estimates(ser)
+        v, _, ag = PC.robust_verdict(est, K_CRIT, family=FAMILY, direction=LIT_DIR)
+        print(f"  {tag} · ROM 대조군(직전 turn TOM 제외)  평균 {est['mu']:+.4f}%p/일"
+              f" · n={est['n']} · 판정 {v} (일치={ag})")
+        lvs = {mk: dm1_series(S, key)[0] for mk, S in _series().items()}
+        dfs = {mk: dm1_series(S, key)[1] for mk, S in _series().items()}
+        print(f"  {tag} · **Day −1 수준**(원문 보고량)   "
+              f"KR {lvs['kr'].mean():+.4f} · US {lvs['us'].mean():+.4f} %/일"
+              f"  (원문 KR +0.38 · US EW +0.33)")
+        e2 = PC.all_estimates(dfs)
+        v2, _, ag2 = PC.robust_verdict(e2, K_CRIT, family=FAMILY, direction=LIT_DIR)
+        print(f"  {tag} · (부가) Day −1 − Other        평균 {e2['mu']:+.4f}%p/일"
+              f" · 판정 {v2} (일치={ag2}) — **원문 미보고 검정**")
+
+    print(f"\n{'='*104}\n[전략 형태 — 임계 없이 보고] 판정 칸이 아니다.")
+    for mk, S in _series().items():
+        t = strategy_turnover(S)
+        print(f"  {mk.upper()}: PIT 진입 실패 {t['pit_miss']}/{t['turns']}"
+              f" ({t['pit_miss_pct']:.1f}%) · 편도 회전율 {t['one_way']*100:.0f}%/월"
+              f" · 비용 {t['cost_pct']:.4f}%p/월 (연 {t['cost_annual']:.2f}%p)")
+
+
+def cmd_audit():
+    """§10~§11 의 **파생 숫자 전부**를 재생성한다 (§4-(c) 지적 5).
+
+    시장별 6종 SE·CI·문헌 SE 결합 t(diff) · PIT 실패 월별 · 창 중복 · 벤치 결손 ·
+    ROM 오염 · 원자료 직접 재계산. `--run` 이 내지 않는 것만 모았다.
+    """
+    PC = _pc()
+    print("=" * 100)
+    print("[H-031] 파생 숫자 감사 — 문서 §10.2·§10.3·§10.4·§11-8·§11-9 재생성")
+    print("=" * 100)
+    lit_se = {"kr": LIT_T["kr"], "us_vw": LIT_T["us_vw"], "us_ew": LIT_T["us_ew"]}
+
+    def six_se(x: pd.Series) -> tuple[float, str]:
+        e = {}
+        for tag, f in (("달", "M"), ("분기", "Q"), ("연", "Y")):
+            e[tag] = PC.cluster_se({"x": x}, f)[1]
+        for L in (3, 6, 12):
+            e[f"DK L={L}"] = PC.driscoll_kraay_se({"x": x}, L)[1]
+        e = {k: v for k, v in e.items() if np.isfinite(v)}
+        w = max(e, key=lambda k: e[k])
+        return e[w], w
+
+    print("\n[§10.2] 시장별 6종 최대 SE · 95% CI · 문헌 SE 결합 t(diff)")
+    for tag, key, lit, lk in (("①", "idx", LIT_IDX, "us_vw"), ("②", "ew", LIT_EW, "us_ew")):
+        for mk in ("kr", "us"):
+            x = turn_diffs(_series()[mk], key)[0]
+            se, w = six_se(x)
+            m = float(x.mean())
+            ls = lit[mk] / (lit_se["kr"] if mk == "kr" else lit_se[lk])
+            t = (lit[mk] - m) / np.sqrt(se ** 2 + ls ** 2)
+            print(f"  {tag}{mk.upper()}: 평균 {m:+.4f} · SE최대 {se:.4f}({w})"
+                  f" · CI[{m-1.96*se:+.4f},{m+1.96*se:+.4f}]"
+                  f" · 문헌 {lit[mk]:+.2f}(SE {ls:.4f}) → t(diff) {t:+.4f}")
+
+    print("\n[§10.4] PIT 진입 실패 — turn 월 라벨 기준")
+    import collections
+    for mk, S in _series().items():
+        ts = classify_turns(S["dates"]); mark_pit_entry(ts, S["dates"])
+        miss = [str(t["month"]) for t in ts if t["entry_pit"] is None]
+        c = collections.Counter(m.split("-")[1] for m in miss)
+        print(f"  {mk.upper()}: {len(miss)}/{len(ts)} · 월별 {dict(sorted(c.items()))}")
+        print(f"        {miss}")
+
+    print("\n[§11-8] 인접 turn 창 중복")
+    for mk, S in _series().items():
+        ts = classify_turns(S["dates"])
+        tot = sum(len(t["other"]) for t in ts)
+        dup = sum(len(set(a["other"]) & set(b["other"])) for a, b in zip(ts, ts[1:]))
+        tom = sum(len(set(a["tom"]) & set(b["other"])) + len(set(a["tom"]) & set(b["tom"]))
+                  for a, b in zip(ts, ts[1:]))
+        print(f"  {mk.upper()}: Other∩Other {dup}/{tot} = {100*dup/tot:.1f}%"
+              f" · TOM 오염 {tom}일")
+
+    print("\n[§11-9] 벤치 계열 결손 — **패널 거래일인데 지수 원자료에 봉이 없는 날**")
+    for mk, S in _series().items():
+        b = loading.load_bench(mk).set_index("date")["close"]
+        bd = set(pd.DatetimeIndex(pd.to_datetime(b.index)).date)
+        miss = [str(d.date()) for d in S["dates"] if d.date() not in bd]
+        print(f"  {mk.upper()}: {len(miss)}일 {miss}")
+        print(f"        (ffill 로 메워지므로 --run 에는 NaN 이 남지 않는다)")
+
+    print("\n[§10.3] ROM 대조군 오염 (정정 전 정의에서 직전 turn TOM 이 섞이는 양)")
+    for mk, S in _series().items():
+        ts = classify_turns(S["dates"])
+        print(f"  {mk.upper()}: 직전 turn 의 +1·+2·+3 = turn 당 {TOM_POST}.00일")
+
+    print("\n[§10.3] Day −1 수준 — 원자료(prices_bench) 직접 재계산으로 교차 확인")
+    for mk in ("kr", "us"):
+        b = loading.load_bench(mk).set_index("date")["close"]
+        r = (b / b.shift(1) - 1.0) * 100.0
+        d = pd.DatetimeIndex(pd.to_datetime(b.index))
+        mkp = pd.PeriodIndex(d, freq="M")
+        last = pd.Series(np.arange(len(d)), index=mkp).groupby(level=0).last().to_numpy()
+        v = r.to_numpy()[last]
+        v = v[np.isfinite(v)]
+        allr = r.to_numpy(); allr = allr[np.isfinite(allr)]
+        print(f"  {mk.upper()}: 월말 마지막 거래일 평균 {v.mean():+.4f}%/일"
+              f" · 전체일 평균 {allr.mean():+.4f}%/일")
+
+
 def cmd_selftest():
     ok = []
 
@@ -338,14 +548,16 @@ def cmd_selftest():
     # Σ|Δw| 를 **비중 경로에서 실제로 계산**해 검사한다 (하드코딩 아님)
     st = classify_turns(d); mark_pit_entry(st, d)
     w = weight_path(st, len(d))
-    chk("진입 성공 turn 은 −1~+3 4일 보유", int(w.sum()) == 4 * len(st))
+    # **Day −1 종가 진입이므로 보유 구간은 +1~+3 의 3일**이다 (그날 수익은 못 번다).
+    chk("진입 성공 turn 은 +1~+3 3일 보유 (Day −1 종가 진입)",
+        int(w.sum()) == 3 * len(st))
     dw = np.abs(np.diff(np.concatenate([[0.0], w, [0.0]]))).sum()
     chk("Σ|Δw| = turn 당 2.0 (전량 진입 + 전량 청산)",
         np.isclose(dw / len(st), 2.0))
     st2 = classify_turns(d_hole); mark_pit_entry(st2, d_hole)
     w2 = weight_path(st2, len(d_hole))
     chk("PIT 진입 실패 turn 은 비중 0으로 지나간다(뒤늦게 들어가지 않는다)",
-        int(w2.sum()) == 4 * (len(st2) - sum(1 for t in st2 if t["entry_pit"] is None)))
+        int(w2.sum()) == 3 * (len(st2) - sum(1 for t in st2 if t["entry_pit"] is None)))
 
     # 차분 계산 — 알려진 값
     S = {"dates": d, "x": np.zeros(len(d)), "market": "kr"}
@@ -385,6 +597,10 @@ if __name__ == "__main__":
         sys.exit(cmd_selftest())
     elif arg == "--power":
         cmd_power()
+    elif arg == "--run":
+        cmd_run()
+    elif arg == "--audit":
+        cmd_audit()
     else:
         print(__doc__)
         sys.exit(2)
