@@ -15,6 +15,12 @@ PROTOCOL §3은 KR·US 월별 차분을 **이어붙여** 판정한다. 그 SE를
   ③ 연 클러스터   — (ㄱ) + 연 내 (ㄴ)
   ④~⑥ Driscoll–Kraay L=3·6·12 — (ㄱ) + (ㄴ)을 HAC 로 동시에
 
+**부호 규약 (2026-08-18 추가)** — `verdict()`·`robust_verdict()` 는 `direction`
+인자를 받는다. **문헌이 예측하는 부호**(+1 또는 −1)이며 그 방향으로 유의해야 `채택`이다.
+기본값 +1 은 H-020·H-022·H-025·H-026 처럼 문헌이 양수를 예측하는 경우다.
+**문헌이 음수를 예측하는 가설(H-028 MAX)은 반드시 −1 을 넘겨야 한다** —
+넘기지 않으면 원문 방향으로 나온 결과가 `기각`으로 뒤집힌다(게이트가 잡은 실제 결함).
+
 `naive` 는 **비교용으로만 출력**하고 견고성 판정에 투표하지 않는다
 (독립 가정이 깨진 것이 확인됐으므로 편향된 추정량이다).
 
@@ -129,14 +135,20 @@ def all_estimates(series: dict) -> dict:
     return out
 
 
-def verdict(t: float, crit: float) -> str:
+def verdict(t: float, crit: float, direction: int = +1) -> str:
+    """3분류. `direction` = **문헌이 예측하는 부호**(+1 또는 −1).
+
+    문헌 방향으로 유의하면 `채택`, 반대 방향으로 유의하면 `기각`이다
+    (PROTOCOL §3.1-7). 기본값 +1 은 문헌이 양수를 예측하는 경우로,
+    H-020·H-022·H-025·H-026 이 전부 여기 해당한다.
+    **문헌이 음수를 예측하는 가설(예: H-028 MAX)은 direction=−1 을 넘겨야 한다** —
+    넘기지 않으면 원문 방향으로 나온 결과가 `기각`으로 뒤집힌다(게이트가 잡은 결함).
+    """
     if not np.isfinite(t):
         return "산출 불가"
-    if t > crit:
-        return "채택"
-    if t < -crit:
-        return "기각"
-    return "측정 불가"
+    if abs(t) <= crit:
+        return "측정 불가"
+    return "채택" if t * direction > 0 else "기각"
 
 
 def _t_cdf(x: float, df: int) -> float:
@@ -178,7 +190,7 @@ def t_crit(df: int, family: int) -> float:
 
 
 def robust_verdict(est: dict, crit: float, *, use_t: bool = False,
-                   family: int = 2) -> tuple[str, dict, bool]:
+                   family: int = 2, direction: int = +1) -> tuple[str, dict, bool]:
     """VOTERS 전원이 같은 판정이면 그 판정, 하나라도 갈리면 **측정 불가**.
 
     `use_t=True` 면 추정량마다 **자기 자유도**의 t 임계를 쓴다
@@ -187,7 +199,7 @@ def robust_verdict(est: dict, crit: float, *, use_t: bool = False,
     vs = {}
     for k in VOTERS:
         c = t_crit(est[f"df_{k}"], family) if use_t else crit
-        vs[k] = verdict(est["mu"] / est[k], c)
+        vs[k] = verdict(est["mu"] / est[k], c, direction)
     uniq = set(vs.values())
     agree = len(uniq) == 1
     return (uniq.pop() if agree else "측정 불가"), vs, agree
@@ -265,7 +277,7 @@ def series_resid_deciles() -> dict:
 
 CASES = [
     ("H-020", "MAX 상위10% 제외", "max", 6, "측정 불가"),
-    ("H-022", "실현분산 노출 조절", "expo", 6, "기각"),
+    ("H-022", "실현분산 노출 조절", "expo", 6, "측정 불가"),   # 2026-08-12 하향 반영
     ("H-025", "MA 타이밍 × 변동성 십분위", "ma", 2, "기각"),
     ("H-026", "잔차 모멘텀 D10−D1", "resid", 2, "측정 불가"),
 ]
@@ -376,6 +388,16 @@ def selftest():
     rv, _, ag = robust_verdict(est, 2.24)
     assert rv == "측정 불가" and not ag
 
+    # ⑤-b **판정 부호 규약** — 문헌 예측 방향으로 유의해야 채택이다
+    assert verdict(+3.0, 2.24, +1) == "채택" and verdict(-3.0, 2.24, +1) == "기각"
+    assert verdict(-3.0, 2.24, -1) == "채택" and verdict(+3.0, 2.24, -1) == "기각"
+    assert verdict(1.0, 2.24, -1) == "측정 불가"
+    est5 = {"mu": -1.0, **{k: 0.2 for k in VOTERS}, **{f"df_{k}": 50 for k in VOTERS}}
+    assert robust_verdict(est5, 2.24, direction=-1)[0] == "채택"   # 음수 문헌
+    assert robust_verdict(est5, 2.24, direction=+1)[0] == "기각"   # 양수 문헌
+    #    기존 4건(문헌 양수)은 기본값으로 동작이 바뀌지 않는다
+    assert robust_verdict(est5, 2.24)[0] == "기각"
+
     # ⑥ 임계값
     assert abs(_N.inv_cdf(1 - 0.05 / (2 * 6)) - 2.6383) < 5e-4
     assert abs(_N.inv_cdf(1 - 0.05 / (2 * 2)) - 2.2414) < 5e-4
@@ -466,7 +488,7 @@ def selftest():
     assert iv1 > iv0, (iv0, iv1)
 
     print("selftest: 12개 항목 통과 (비겹침=naive · 완전동일=√2배 · 상쇄=0 · "
-          "평균/naive 일치 · 3분류+견고성규칙 · 임계값 · **정렬** · DK(lag0=클러스터·AR증가) · "
+          "평균/naive 일치 · 3분류+견고성규칙+부호규약 · 임계값 · **정렬** · DK(lag0=클러스터·AR증가) · "
           "**클러스터단위 분리+G<2** · **DK커널=Bartlett** · **t임계(닫힌형태 Cauchy·df2)** · "
           "**자유도 배정** · 역분산결합)")
 
