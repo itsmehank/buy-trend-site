@@ -1,4 +1,4 @@
-"""H-029 — 트렌드 팩터. **Han·Zhou·Zhu (2016, JFE 122(2) 352-375) 원문 형태 그대로.**
+"""H-033 — 트렌드 팩터 (H-029 재시도). **Han·Zhou·Zhu (2016, JFE 122(2) 352-375) 원문 형태 그대로.**
 
 원문 식 (1)(2)(3)(4)(5):
 
@@ -15,7 +15,7 @@
   · 번인: **첫 1,000일 + 이후 12개월 폐기**(원문 §2.4 그대로).
 
   ⚠️ **오분위다 — 십분위가 아니다.** registry 등재 시 '십분위'로 잘못 적혔다.
-     원문 §2.2: "we sort all stocks into five portfolios by their expected returns".
+     원문 §2.2: "We sort all stocks into five portfolios by their expected returns".
      각주 5는 십분위/시총가중이면 결과가 "similar (stronger/weaker)"라고만 한다.
 
 원문 Table 1 (1930-06~2014-12, 1,015개월):
@@ -395,7 +395,7 @@ def run_arm(P: dict, F: dict, *, score: np.ndarray | None = None,
 # ────────────────────────────────────────────────────────── 플라시보
 
 def placebo_scores(P: dict, F: dict) -> dict:
-    """§3.2 사전 배치 플라시보 — **결과를 보기 전에 고정했다.**
+    """§3.3 사전 배치 플라시보 — **결과를 보기 전에 고정했다.**
 
     P1 σ 정렬     : 250일 일간수익률 표준편차로 직접 정렬
     P2 σ 직교화   : E[r] 을 매월 σ 에 횡단면 회귀한 **잔차**로 정렬
@@ -427,8 +427,8 @@ def placebo_scores(P: dict, F: dict) -> dict:
             pick = rng.choice(valid, size=BETA_WIN, replace=False)
             p3[m] = P["A"][m] @ F["beta"][pick].mean(axis=0)
 
-    p5 = P["pit_dv"].copy()
-    return {"P1 σ정렬": p1, "P2 σ직교화": p2, "P3 계수무작위": p3, "P4 규모정렬": p5}
+    p4 = P["pit_dv"].copy()
+    return {"P1 σ정렬": p1, "P2 σ직교화": p2, "P3 계수무작위": p3, "P4 규모정렬": p4}
 
 
 # ─────────────────────────────────────────────────────────────── 명령
@@ -452,7 +452,7 @@ def _panels() -> dict:
 def cmd_power():
     PC = _pc()
     print("=" * 100)
-    print("[H-029] 사전 검출력 — **SE·회전율·표본만**. 평균·t·부호는 출력 경로가 없다.")
+    print("[H-033] 사전 검출력 — **SE·회전율·표본만**. 평균·t·부호는 출력 경로가 없다.")
     print(f"  가족 {FAMILY}칸 Bonferroni → |t| > {K_CRIT:.4f}"
           f" · 문헌 효과 월 +{LIT_SPREAD}%p · 문헌 회전율 {LIT_TURNOVER*100:.1f}%/월")
     print("  검정력은 PROTOCOL §3 개정판대로 **6종 중 SE 최대(= 최저 검정력)** 기준.")
@@ -587,14 +587,18 @@ def cmd_selftest():
         abs(LIT_BETC * LIT_T13_BASE - LIT_HEADLINE) < 0.01)
     chk("Panel B: 0.68 × 75.1% = 0.511 (모멘텀)",
         abs(LIT_MOM_BETC * LIT_MOM_T13 - LIT_MOM_RET) < 0.01)
-    chk("Panel C: 56.1 = 131.2 − 75.1 이고 1.99 × 56.1% = 1.63 − 0.511",
+    chk("Panel C: 56.1 = 131.2 − 75.1 이고 1.99 × 56.1% = (1.24×1.312) − 0.511",
         abs((LIT_T13_BASE - LIT_MOM_T13) - 0.561) < 0.002
         and abs(1.99 * 0.561 - (LIT_BETC * LIT_T13_BASE - LIT_MOM_RET)) < 0.01)
     chk("본문 65.6%(다리당 Σ|Δw|) × 2 = Table 13 131.2%(양 다리)",
         abs(2 * LIT_TURNOVER_SIGMA - LIT_T13_BASE) < 1e-9)
     chk("원문 다리당 **편도** 회전율 = 65.6/2 = 32.8% (저장소 `turn` 과 같은 척도)",
         abs(LIT_TURNOVER - LIT_TURNOVER_SIGMA / 2) < 1e-9)
-    chk("교차검증: 모멘텀 편도 18.8%/월 ≈ J-T 6개월 보유 이론값 1/6 = 16.7%",
+    # **보조 근거다.** 원문 Table 13 의 모멘텀은 "(quintile) momentum factor" 이고
+    # **보유기간이 6개월이라는 서술이 원문에 없다.** 월 재정렬이면 1/6 은 옳은 비교
+    # 대상이 아니다. **척도 확정은 Panel A·C 만으로 충분**하며 이 항목은 정황일 뿐이다.
+    chk("(보조) 모멘텀 편도 18.8%/월 — J-T 6개월 보유 가정 시 1/6 과 정합. "
+        "**원문에 보유기간 서술 없음 → 척도 근거로 쓰지 않는다**",
         abs(LIT_MOM_SIGMA / 2 - 1 / 6) < 0.03)
 
     # 임계 — 가족 2칸 양측 Bonferroni
@@ -606,8 +610,22 @@ def cmd_selftest():
         LAGS == (3, 5, 10, 20, 50, 100, 200, 400, 600, 800, 1000))
     chk("오분위(5) — 십분위가 아니다", N_QUINT == 5)
     chk("문헌 방향 +1 (양수 유의면 채택)", LIT_DIR == +1)
-    chk("번인 = 최장 래그 = 1,000일 (원문 §2.4)",
-        BURN_DAYS == 1000 and BURN_DAYS == max(LAGS))
+    # **번인은 별도 상수로 자르지 않고 `eligible()` 이 래그 11종 전부 유효를
+    # 요구하는 것으로 구현된다.** 종전 검사는 `BURN_DAYS == max(LAGS)` 라
+    # **정의상 참인 항진명제**였다(게이트 3차 지적). **실제 동작을 검사한다** —
+    # 직전 999봉만 유효한 종목은 최장 래그(1,000)가 NaN 이라 적격에서 빠져야 한다.
+    chk("번인 = 원문 §2.4 의 1,000일", BURN_DAYS == 1000)
+    _n = 1200
+    _X = np.full((_n, 2), 10.0)
+    _V = np.ones((_n, 2), dtype=bool)
+    _V[:_n - 999, 1] = False          # 1번 종목은 직전 999봉만 유효
+    _X[:_n - 999, 1] = 0.0
+    _row = np.array([_n - 1])
+    _a0 = _rolling_mean_at(_row, _X, _V, 1000)[0, 0]
+    _a1 = _rolling_mean_at(_row, _X, _V, 1000)[0, 1]
+    chk("직전 1,000봉 전부 유효하면 최장 래그 산출됨", np.isfinite(_a0))
+    chk("직전 999봉만 유효하면 최장 래그가 NaN → 적격에서 탈락(번인 실동작)",
+        not np.isfinite(_a1))
     chk("검정력 입력은 Table 10 대응값 1.78 (헤드라인 1.63 아님)",
         LIT_SPREAD == 1.78 and LIT_HEADLINE == 1.63)
     chk("롱온리 e* = 0.80 (Table 8 유도 중앙값 0.801)",
@@ -630,6 +648,21 @@ def cmd_selftest():
         "exec_lag" in sig and "ret_cap" in sig)
     chk("§3.4 근사 사이즈 필터 cap_n 이 eligible · run_arm 에 구현됨",
         "cap_n" in esig and "cap_n" in sig)
+    # **기능 검사** — 시그니처 존재만 보면 부족하다(게이트 3차 지적. ret_cap 에
+    # 대해 같은 지적을 받아 실호출 검사를 만든 것과 같은 형태).
+    _m = 3
+    _P = {"market": "us",
+          "A": np.ones((_m + 1, 50, len(LAGS))),
+          "pm": np.full((_m + 1, 50), 100.0),
+          "pit_dv": np.tile(np.arange(50, dtype=float) * 1e6 + 5e6, (_m + 1, 1))}
+    _all = int(eligible(_P, 0).sum())
+    _cap = int(eligible(_P, 0, cap_n=20).sum())
+    chk("cap_n 없으면 적격 50종목 전부", _all == 50)
+    chk("cap_n=20 이면 적격이 20종목 이하로 줄어든다", _cap <= 20 and _cap == 20)
+    _dv = _P["pit_dv"][0]
+    _sel = np.flatnonzero(eligible(_P, 0, cap_n=20))
+    chk("cap_n 이 남기는 것은 **거래대금 상위** 20종목",
+        set(_sel) == set(np.argsort(_dv)[::-1][:20]))
     # ret_cap 을 **`_hold_return` 을 실제로 호출해** 검사한다 (게이트 2차 지적 —
     # 종전에는 np.minimum 만 봐서 라벨과 검사 내용이 달랐다).
     _P = {"mret": np.array([[np.nan, np.nan], [2.5, 0.10]]), "me": np.array([0, 1]),
