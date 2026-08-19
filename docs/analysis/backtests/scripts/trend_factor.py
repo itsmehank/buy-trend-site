@@ -33,10 +33,11 @@
 판정은 PROTOCOL §3 개정판(2026-08-12) — **6종 추정량이 갈리면 측정 불가**.
 
   PYTHONPATH=.:docs/analysis .venv/bin/python -W ignore \
-    docs/analysis/backtests/scripts/trend_factor.py --selftest | --power
+    docs/analysis/backtests/scripts/trend_factor.py --selftest | --power | --run
 
 **--power 는 SE·회전율·표본크기만 출력한다. 평균·t·부호는 출력 경로가 없다**
 (PROTOCOL §3.1-2 — 점추정치를 보면 사전등록이 무효가 된다).
+`--run` 은 **게이트 통과 후** 작성됐고, 여기서 처음으로 평균·t·부호가 나온다.
 """
 from __future__ import annotations
 
@@ -117,6 +118,20 @@ FAMILY = 2
 K_CRIT = _N.inv_cdf(1.0 - 0.05 / (2.0 * FAMILY))       # 2.2414
 
 SEED = 20260818                            # 플라시보 P3 난수 시드
+
+# §3.4 **근사 사이즈 필터** 견고성 축의 N — 사전등록은 "PIT 거래대금 상위 N"까지만
+# 정하고 N 을 고정하지 않았다. **결과를 보기 전에** 저장소 기존 규약값을 그대로 쓴다:
+#   CAP_N  = 베이스라인 C 유니버스 크기(H-020~H-024) · `max_lottery_deciles.CAP_N` 와 동일
+#   CAP_N2 = 그 절반 — H-028 이 문턱 배수 ×1.0/×1.5 로 **단조성**을 본 것과 같은 목적
+# **판정 대체가 아니라 병기**이므로 둘 다 출력한다(고르지 않는다).
+CAP_N = {"kr": 400, "us": 500}
+CAP_N2 = {"kr": 200, "us": 250}
+
+# **리밸일 우연의 CAGR 표준편차** — H-016 실측(`2026-08-11-rebalance-timing-luck.md`
+# 79·88행). PROTOCOL §3.1-6: "4.02%p(KR) 미만의 CAGR 차이는 우위의 근거로 쓰지 않는다."
+# **차분(Q5−Q1)에는 해당 없다**(양 팔이 같은 리밸일이라 상쇄) — 절대 성과 보고용이다.
+# ⚠️ 변형이 4개뿐이라 자유도 3의 추정치다(H-016 한계 2) — "대략 4%p 수준"으로만 읽는다.
+TIMING_LUCK_SD = {"kr": 4.02, "us": 1.43}
 
 
 # ────────────────────────────────────────────────────────────── 패널
@@ -512,6 +527,351 @@ def cmd_power():
               f"  (gross 였다면 {pwg*100:.1f}%)")
 
 
+# ──────────────────────────────────────────────── 판정 보조 (--run 전용)
+
+def tstat(x) -> float:
+    """naive t — **보고용**. 판정은 6종 클러스터/DK 추정량이 한다."""
+    a = np.asarray(x, dtype=float)
+    s = a.std(ddof=1)
+    return float(a.mean() / (s / np.sqrt(len(a)))) if s > 0 else float("nan")
+
+
+def spearman(a, b) -> float:
+    ra = pd.Series(np.asarray(a, dtype=float)).rank().to_numpy()
+    rb = pd.Series(np.asarray(b, dtype=float)).rank().to_numpy()
+    return float(np.corrcoef(ra, rb)[0, 1])
+
+
+def cagr(monthly_pct: np.ndarray) -> float:
+    """월 %수익 계열 → 연 %CAGR."""
+    g = np.prod(1.0 + np.asarray(monthly_pct, dtype=float) / 100.0)
+    return float((g ** (12.0 / len(monthly_pct)) - 1.0) * 100.0)
+
+
+def type_m(se: float, effect: float, k: float = K_CRIT) -> float:
+    """`E[|d̂| | 유의] / effect` — 유의 시 과대추정 배율(§3.5). **닫힌 형태**.
+
+    `z ~ N(d, 1)` (d = effect/se) 에서 유의 영역은 `z < −k` 와 `z > +k` 의
+    **서로 떨어진 두 구간**이다. 하나로 이어 적분하면 `(−k, +k)` 를 가로지르는
+    가짜 구간이 분자·분모에 섞인다 (H-026 게이트 3회차가 잡은 오류).
+
+        P(|z| > k)        = Φ(d − k) + Φ(−d − k)
+        E[ z·1{z > k}]    =  d·Φ(d − k) + φ(k − d)
+        E[−z·1{z < −k}]   = −d·Φ(−d − k) + φ(k + d)
+    """
+    d = effect / se
+    if d == 0:
+        return float("nan")
+    phi = lambda t: float(np.exp(-0.5 * t * t) / np.sqrt(2 * np.pi))
+    p = _N.cdf(d - k) + _N.cdf(-d - k)
+    if p <= 0:
+        return float("nan")
+    num = (d * _N.cdf(d - k) + phi(k - d)) + (-d * _N.cdf(-d - k) + phi(k + d))
+    return float((num / p) / d)
+
+
+def arm_series(P: dict, F: dict, key: str = "spread", **kw) -> tuple:
+    """팔을 돌려 (월별 계열, 원 결과) 를 돌려준다. `key` 는 `spread` 또는 `longonly`."""
+    a = run_arm(P, F, **kw)
+    if not a:
+        return None, None
+    return pd.Series(a[key], index=P["months"][a["months"]]), a
+
+
+def _pooled_cost(arms: dict, longonly: bool = False) -> float:
+    """표본가중 월 비용 — `--power` §4.3 과 같은 방식(Type M 입력의 net 효과용)."""
+    num = den = 0.0
+    for a in arms.values():
+        cs = a["cost"]
+        cm = float(cs[:, N_QUINT - 1].mean())
+        if not longonly:
+            cm += float(cs[:, 0].mean())
+        num += cm * a["n"]
+        den += a["n"]
+    return num / den if den else float("nan")
+
+
+def _report_cell(PC, ser: dict, title: str, lit: float, note: str,
+                 cost: float | None = None) -> dict:
+    """판정 칸 하나를 6종 추정량으로 판정하고 출력한다. 반환 = `all_estimates`."""
+    est = PC.all_estimates(ser)
+    rv, vs, agree = PC.robust_verdict(est, K_CRIT, family=FAMILY, direction=LIT_DIR)
+    rvt, _, agt = PC.robust_verdict(est, K_CRIT, use_t=True, family=FAMILY,
+                                    direction=LIT_DIR)
+    worst = max(PC.VOTERS, key=lambda k: est[k])
+    print(f"\n{'=' * 104}\n[{title}]  문헌 {lit:+.2f}%p/월 — {note}")
+    print(f"  n={est['n']}개월 · 겹치는 달 {est['overlap']} · ρ={est['rho']:+.4f}"
+          f" · **월 {est['mu']:+.4f}%p · 연 {est['mu'] * 12:+.2f}%p**")
+    print(f"  {'추정량':<10}{'SE':>9}{'t':>9}   판정")
+    print(f"  {'naive(참고)':<10}{est['naive']:>9.4f}{est['mu'] / est['naive']:>9.3f}"
+          f"   {PC.verdict(est['mu'] / est['naive'], K_CRIT, LIT_DIR)}  ← 투표하지 않음")
+    for k in PC.VOTERS:
+        print(f"  {k:<10}{est[k]:>9.4f}{est['mu'] / est[k]:>9.3f}   {vs[k]}")
+    print(f"  → 6종 {'일치' if agree else '**갈림**'} · **판정 = {rv}**"
+          f"   (direction={LIT_DIR:+d} · 임계 {K_CRIT:.4f})")
+    print(f"  → t(df) 참조분포로 바꾸면: {rvt} ({'일치' if agt else '갈림'})"
+          f" — 판정 {'불변' if rvt == rv else '**변동**'}  [견고성 §3.4]")
+    lo = est["mu"] - 1.96 * est[worst]
+    hi = est["mu"] + 1.96 * est[worst]
+    print(f"  95% CI(SE 최대={worst} {est[worst]:.4f}) = [{lo:+.4f}, {hi:+.4f}] %p/월"
+          f" · 0 포함? {'예' if lo <= 0 <= hi else '아니오'}"
+          f" · 문헌값({lit}) 포함? {'예' if lo <= lit <= hi else '아니오'}")
+    if cost is not None:
+        net = lit - cost
+        pw = _N.cdf(net / est[worst] - K_CRIT) + _N.cdf(-net / est[worst] - K_CRIT)
+        print(f"  Type M(설계 단계 · **가정 효과** 기준) = {type_m(est[worst], net):.3f}배 "
+              f"(net e* = {lit} − 비용 {cost:.4f} = {net:.4f} · SE 최대"
+              f" · 사전 검정력 {pw * 100:.1f}%)")
+        # **오독 방지 (§4-(b) 경미 4)** — 위 값은 "문헌 효과가 참일 때" 의 배율이라
+        # 1.0 에 가깝다. 결과가 비유의인 지금 그것을 "우리 추정치는 안 부풀었다"로
+        # 읽으면 정반대다. **관측 효과 기준 배율을 반드시 병기**한다.
+        print(f"  Type M(**관측 효과 {est['mu']:+.4f} 기준**) ="
+              f" **{type_m(est[worst], est['mu']):.3f}배**"
+              f" — 이 크기의 효과가 참이었다면 유의했을 때 이만큼 부풀어 보인다")
+    print(f"  [시장별 — **임계 없이 병기**]")
+    signs = []
+    for mk, s in ser.items():
+        v = s.to_numpy()
+        signs.append(np.sign(v.mean()))
+        print(f"    {mk.upper()} n={len(v)} · 월 {v.mean():+.4f}%p"
+              f" · 연 {v.mean() * 12:+.2f}%p · naive t={tstat(v):+.3f}")
+    print(f"    부호 {'**일치**' if len(set(signs)) == 1 else '**불일치 — 판정문에 명기**'}")
+    return est
+
+
+def cmd_run():
+    PC = _pc()
+    print("=" * 104)
+    print("[H-033] 트렌드 팩터 — Han·Zhou·Zhu (2016, JFE) 원문 형태 · H-029 재시도")
+    print("  래그 11종 Ã → 월별 횡단면 회귀 → E[β] 12개월 평균 → 오분위")
+    print("  Q5 − Q1 zero-investment · 동일가중 · 1개월 보유 · 레짐 없음(원문에 없음)")
+    print(f"  판정: 통합 표본 · 가족 {FAMILY}칸 → |t| > {K_CRIT:.4f}"
+          f" · **6종 갈리면 측정 불가**(PROTOCOL §3) · direction={LIT_DIR:+d}")
+    print(f"  문헌 ① Q5−Q1 = +{LIT_SPREAD}%p/월 (Table 10 `price filter only`)"
+          f" · ② 롱온리 = +{LIT_LONGONLY}%p/월 (Table 8 유도 · 원문 미보고)")
+    print("=" * 104)
+
+    ser, lo_ser, gr_ser, arms = {}, {}, {}, {}
+    for mk, (P, F) in _panels().items():
+        s, a = arm_series(P, F)
+        if a is None:
+            print(f"\n── {mk.upper()} ── 산출 불가")
+            continue
+        arms[mk] = a
+        ser[mk] = s
+        mm = P["months"][a["months"]]
+        lo_ser[mk] = pd.Series(a["longonly"], index=mm)
+        gr_ser[mk] = pd.Series(a["gross"][:, N_QUINT - 1] - a["gross"][:, 0], index=mm)
+        print(f"\n{'─' * 104}\n── {mk.upper()} ── n={a['n']}개월 ({mm[0]}~{mm[-1]})"
+              f" · 적격 평균 {a['elig']:.0f}종목 · 오분위 {a['nq']:.1f}종목")
+        print(f"{'오분위':>7}{'월수익(net)':>13}{'연환산':>10}{'gross':>10}{'비용':>9}")
+        for q in range(N_QUINT):
+            print(f"{'Q' + str(q + 1):>7}{a['q'][:, q].mean():>+12.4f}%"
+                  f"{a['q'][:, q].mean() * 12:>+9.2f}%"
+                  f"{a['gross'][:, q].mean():>+9.4f}%{a['cost'][:, q].mean():>8.4f}%")
+        sp = a["spread"]
+        ann, vol = sp.mean() * 12, sp.std(ddof=1) * np.sqrt(12)
+        print(f"  Q5−Q1  월 {sp.mean():+.4f}%p · 연 {ann:+.2f}%p"
+              f" · naive t={tstat(sp):+.3f} · 변동성 {vol:.2f}%"
+              f" · Sharpe {ann / vol:+.2f} · P(>0) {(sp > 0).mean() * 100:.0f}%")
+        print(f"  [임계 없이 보고] 오분위 순위상관 ρ ="
+              f" {spearman(np.arange(N_QUINT), a['gross'].mean(axis=0)):+.3f}"
+              f"  (원문 Table 8 오분위는 단조 증가 → ρ=+1.000)")
+        print(f"  롱온리 Q5−유니버스 월 {a['longonly'].mean():+.4f}%p"
+              f" · naive t={tstat(a['longonly']):+.3f}"
+              f"   · 유니버스 EW 월 {a['uni'].mean():+.4f}%")
+        print(f"  회전율(다리당 편도) {a['turn'].mean() * 100:.1f}%/월"
+              f" — 원문 {LIT_TURNOVER * 100:.1f}% 의 {a['turn'].mean() / LIT_TURNOVER:.2f}배")
+        # **절대 성과는 리밸일 산포와 함께만 읽는다** (PROTOCOL §3.1-6 · §4-(b) 중대 2).
+        # 차분(Q5−Q1)은 양 팔이 같은 리밸일이라 상쇄되지만, CAGR 은 절대 성과다.
+        q5c, unic = cagr(a["q"][:, N_QUINT - 1]), cagr(a["uni"])
+        noise = TIMING_LUCK_SD[mk]
+        gap = q5c - unic
+        print(f"  [절대 성과 — **리밸일 산포와 함께만 읽는다**]"
+              f" Q1 CAGR {cagr(a['q'][:, 0]):+.2f}% · Q5 CAGR {q5c:+.2f}%"
+              f" · 유니버스 CAGR {unic:+.2f}%")
+        print(f"     Q5 − 유니버스 = {gap:+.2f}%p vs {mk.upper()} 리밸일 잡음"
+              f" {noise:.2f}%p (H-016) →"
+              f" {'**잡음 미만 — 우위의 근거로 쓸 수 없다**(PROTOCOL §3.1-6)' if abs(gap) < noise else '잡음 초과'}")
+
+    if len(ser) < 2:
+        print("\n두 시장이 모두 산출되지 않아 통합 판정을 낼 수 없다.")
+        return
+
+    est1 = _report_cell(PC, ser, "① 주 판정 — 통합 Q5 − Q1 (양 다리 비용 차감)",
+                        LIT_SPREAD, "원문 Table 10 `price filter only`",
+                        cost=_pooled_cost(arms))
+    _report_cell(PC, gr_ser, "[병기] 비용 전(gross) Q5 − Q1 — 원문과 직접 비교 가능",
+                 LIT_SPREAD, "판정에 쓰지 않는다")
+    _report_cell(PC, lo_ser, "② 부수 판정 — 통합 롱온리 Q5 − 유니버스EW",
+                 LIT_LONGONLY, "원문 Table 8 오분위에서 **유도** — 원문 미보고",
+                 cost=_pooled_cost(arms, longonly=True))
+
+    # ── §3.3 플라시보 — **귀속 조건은 결과를 보기 전에 고정됐다** ──────────────
+    print(f"\n{'=' * 104}\n[③ 플라시보 — §3.3 신호 귀속 조건 (사전 고정)]")
+    print("  H-028 이 정확히 여기서 죽었다 — 통합 t 가 6/6 유의했는데 신호를 귀속하지 못했다.")
+    # **정확한 사유** (§4-(b) 참고 지적): 1,000봉 번인은 `eligible()` 을 통해 **모든 팔에
+    # 공통**으로 걸린다. P1·P4 가 12개월 긴 것은 **E[β] 12개월 창이 없기 때문**이다.
+    print("  ⚠️ P1·P4 는 E[β] 12개월 창이 필요 없어 **본안보다 정확히 12개월 길다**"
+          " (1,000봉 번인은 `eligible()` 로 전 팔 공통).")
+    print("  §3.3 조건 3 은 '**본안 스프레드**의 절반'과 비교하므로 **본안 표본으로 맞춘 값**"
+          "으로 판정하고, 전체 표본값을 함께 적는다.")
+    pl_est = {}
+    for name in ("P1 σ정렬", "P2 σ직교화", "P3 계수무작위", "P4 규모정렬"):
+        pser, mser = {}, {}
+        for mk, (P, F) in _panels().items():
+            sc = placebo_scores(P, F)[name]
+            s, a = arm_series(P, F, score=sc)
+            if a is None:
+                continue
+            pser[mk] = s
+            mser[mk] = s[s.index.isin(ser[mk].index)]     # **본안 표본으로 정렬**
+        if len(pser) < 2 or any(len(v) < 12 for v in mser.values()):
+            print(f"\n  {name:<12} 산출 불가 (표본 부족)")
+            pl_est[name] = None
+            continue
+        e = PC.all_estimates(pser)
+        em = PC.all_estimates(mser)
+        rv, _, ag = PC.robust_verdict(e, K_CRIT, family=FAMILY, direction=LIT_DIR)
+        rvm, _, agm = PC.robust_verdict(em, K_CRIT, family=FAMILY, direction=LIT_DIR)
+        ts = [e["mu"] / e[k] for k in PC.VOTERS]
+        tsm = [em["mu"] / em[k] for k in PC.VOTERS]
+        pl_est[name] = (e, rv, ag, em, rvm, agm)
+        # **라벨 주의** — 아래 `채택`/`기각` 은 `robust_verdict` 의 3분류 문자열일 뿐
+        # **플라시보에 대한 것**이다. 가설 판정이 아니다 (§4-(b) 참고 지적).
+        print(f"\n  {name:<12} [전체 표본] 월 {e['mu']:+.4f}%p (연 {e['mu'] * 12:+.2f}%p)"
+              f" · n={e['n']} · 6종 t {min(ts):+.3f}~{max(ts):+.3f}"
+              f" · 유의성 {rv}({'일치' if ag else '갈림'})")
+        print(f"  {'':<12} [**본안 표본**] 월 {em['mu']:+.4f}%p"
+              f" (연 {em['mu'] * 12:+.2f}%p) · n={em['n']}"
+              f" · 6종 t {min(tsm):+.3f}~{max(tsm):+.3f}"
+              f" · 유의성 {rvm}({'일치' if agm else '갈림'})")
+        print(f"  {'':<12} 본안(①) 대비 **{abs(em['mu']) / abs(est1['mu']) * 100:.1f}%**"
+              f" (전체 표본이면 {abs(e['mu']) / abs(est1['mu']) * 100:.1f}%)"
+              f" · 시장별(본안 표본) " + " · ".join(
+                  f"{m.upper()} {v.mean():+.4f}" for m, v in mser.items()))
+
+    print(f"\n  {'─' * 100}\n  [귀속 성립 조건 — 셋 다 충족해야 트렌드 신호에 귀속한다]")
+    cond = {}
+    e2 = pl_est["P2 σ직교화"]
+    if e2 is None:
+        cond[1] = False
+        print("  1. P2 산출 불가 → **불충족**")
+    else:
+        e = e2[0]
+        same = np.sign(e["mu"]) == np.sign(est1["mu"])
+        allsig = all(abs(e["mu"] / e[k]) > K_CRIT for k in PC.VOTERS)
+        cond[1] = bool(same and allsig)
+        print(f"  1. P2(σ직교화) 부호 유지 {same} ∧ 6종 전부 유의 {allsig}"
+              f" → {'충족' if cond[1] else '**불충족**'}")
+    e3 = pl_est["P3 계수무작위"]
+    if e3 is None:
+        cond[2] = False
+        print("  2. P3 산출 불가 → **불충족**")
+    else:
+        rv3 = e3[1]
+        mx = max(abs(e3[0]["mu"] / e3[0][k]) for k in PC.VOTERS)
+        r3 = abs(e3[0]["mu"]) / abs(est1["mu"])
+        cond[2] = rv3 == "측정 불가"
+        print(f"  2. P3(계수 무작위)이 비유의 — 유의성 {rv3} · 6종 |t| 최대 {mx:.3f}"
+              f" → {'충족' if cond[2] else '**불충족**'}")
+        # **§4-(b) 중대 1** — 조건 2 도 조건 1 과 같은 병을 앓는다. 충족 사유가
+        # "효과가 작아서"가 아니라 "검정이 이 크기를 못 잡아서"일 수 있다.
+        if cond[2] and r3 >= 0.5:
+            print(f"     ⚠️ **이 '충족'은 귀속 지지 근거가 아니다** — P3 점추정치가"
+                  f" 본안의 **{r3 * 100:.1f}%**(부호 동일)로 작지 않다.")
+            print(f"     충족된 이유는 오직 |t| 최대 {mx:.3f} < {K_CRIT:.4f} 즉"
+                  f" **검정이 이 크기를 잡을 검정력이 없기 때문**이다.")
+            print(f"     P3 는 β 를 전 표본에서 뽑아 **β 의 무조건 평균을 보존**하므로"
+                  f" Ã 횡단면 구조가 그대로 살아남는다 —")
+            print(f"     점추정치는 오히려 '시점 정보가 신호가 아니다' 쪽을 가리킨다."
+                  f" **결과 문서에 이대로 적는다.**")
+    cond[3] = True
+    for nm in ("P1 σ정렬", "P4 규모정렬"):
+        if pl_est[nm] is None:
+            cond[3] = False
+            print(f"  3. {nm} 산출 불가 → **불충족**")
+            continue
+        em = pl_est[nm][3]                      # **본안 표본으로 맞춘 값으로 판정**
+        ratio = abs(em["mu"]) / abs(est1["mu"])
+        ratio_full = abs(pl_est[nm][0]["mu"]) / abs(est1["mu"])
+        signed = em["mu"] / est1["mu"]          # 부호까지 본 비 (참고)
+        bad = ratio >= 0.5
+        cond[3] = cond[3] and not bad
+        print(f"  3. {nm} 크기 {ratio * 100:.1f}% (< 50% 여야 함"
+              f" · 전체 표본이면 {ratio_full * 100:.1f}%)"
+              f" → {'충족' if not bad else '**불충족**'}")
+        if signed < 0:
+            # **§4-(b) 경미 1** — 사전등록 문구는 "절반 이상 크기를 **재현**"이다.
+            # 반대 부호는 아무것도 재현하지 않는다. **절댓값 비교는 사전등록보다
+            # 엄격한 읽기**이며 귀속을 어렵게 하는 방향이다. 그대로 기록한다.
+            print(f"     ※ 부호 포함 비는 {signed * 100:+.1f}% — **본안과 반대 부호**다."
+                  f" 절댓값으로 비교한 것은 사전등록보다 **엄격한** 읽기이며")
+            print(f"       (반대 부호는 '재현'이 아니다) 귀속을 어렵게 하는 방향이다."
+                  f" 결과 문서에 명기한다.")
+        if 0.4 <= ratio < 0.6:
+            print(f"     ※ **임계 50%에서 {abs(ratio - 0.5) * 100:.1f}%p 거리**다 —"
+                  f" 표본 정렬 선택(사전등록에 없음)이 이 값을 움직인다. 여유폭을 그대로 적는다.")
+    okall = all(cond.values())
+    print(f"\n  ⇒ **귀속 {'성립' if okall else '불성립'}**")
+    if not okall:
+        print("  ⇒ registry·결과 요약에 반드시 명기: **신호를 트렌드에 귀속할 수 없음 —"
+              " 이 결과를 Han·Zhou·Zhu 의 지지/반증 증거로 인용 금지**")
+    print("  ※ P2 생존은 지지 증거가 아니다(§3.3) — 플라시보는 귀속을 반증하는 장치다.")
+    print("  ※ **조건 1 은 주 판정이 유의하지 않으면 구조적으로 충족될 수 없다** —"
+          " P2 는 본안에서 σ 성분을 뺀 것이라")
+    print("     본안이 6/6 비유의면 P2 도 6/6 유의가 될 수 없다. 조건 1 의 불충족은"
+          " **독립적인 정보가 아니다**.")
+    print("     귀속 판단에서 실제로 정보를 갖는 것은 **조건 2·3**이다 — 결과 문서에 이대로 적는다.")
+
+    # ── §3.4 견고성 4축 — 판정을 대체하지 않는다 ──────────────────────────────
+    print(f"\n{'=' * 104}\n[④ 견고성 — §3.4 사전 지정. **판정을 대체하지 않는다**]")
+    print(f"  ⚠️ 사전등록은 근사 사이즈 필터의 **N 을 고정하지 않았다** — CAP_N"
+          f" {CAP_N['kr']}/{CAP_N['us']} 은 게이트 후 고정했고")
+    print(f"     저장소 기존 상수(`max_lottery_deciles.CAP_N` = 베이스라인 C 유니버스)에"
+          f" 앵커했다. CAP_N2 는 그 절반(단조성 확인).")
+    print(f"{'축':<34}{'통합 월':>11}{'연':>9}{'6종 t 최소':>11}{'최대':>9}"
+          f"{'n':>6}  판정")
+    base_t = [est1["mu"] / est1[k] for k in PC.VOTERS]
+    print(f"{'(본안) 주 판정':<34}{est1['mu']:>+10.4f}%{est1['mu'] * 12:>+8.2f}%"
+          f"{min(base_t):>11.3f}{max(base_t):>9.3f}{est1['n']:>6}"
+          f"  {PC.robust_verdict(est1, K_CRIT, family=FAMILY, direction=LIT_DIR)[0]}")
+    axes = [("체결 지연 exec_lag=1 (T+1 종가)", lambda mk: dict(exec_lag=1)),
+            (f"이상치 상한 ret_cap=+{RET_CAP * 100:.0f}%", lambda mk: dict(ret_cap=RET_CAP)),
+            (f"근사 사이즈 필터 상위 {CAP_N['kr']}/{CAP_N['us']}",
+             lambda mk: dict(cap_n=CAP_N[mk])),
+            (f"근사 사이즈 필터 상위 {CAP_N2['kr']}/{CAP_N2['us']}",
+             lambda mk: dict(cap_n=CAP_N2[mk]))]
+    flips = []
+    for label, kwf in axes:
+        rser = {}
+        for mk, (P, F) in _panels().items():
+            s, a = arm_series(P, F, **kwf(mk))
+            if a is not None:
+                rser[mk] = s
+        if len(rser) < 2:
+            print(f"{label:<34}{'산출 불가':>40}")
+            flips.append(label)
+            continue
+        e = PC.all_estimates(rser)
+        rv, _, _ = PC.robust_verdict(e, K_CRIT, family=FAMILY, direction=LIT_DIR)
+        ts = [e["mu"] / e[k] for k in PC.VOTERS]
+        print(f"{label:<34}{e['mu']:>+10.4f}%{e['mu'] * 12:>+8.2f}%"
+              f"{min(ts):>11.3f}{max(ts):>9.3f}{e['n']:>6}  {rv}")
+        if rv != PC.robust_verdict(est1, K_CRIT, family=FAMILY, direction=LIT_DIR)[0]:
+            flips.append(label)
+    if flips:
+        print(f"\n  ⚠️ **하나만 바꿔도 판정이 뒤집히는 축이 있다 — 판정문에 명기**: "
+              + " · ".join(flips))
+    else:
+        print("\n  → 네 축 전부에서 판정 불변")
+
+    for mk in ("kr", "us"):
+        w = loading.staleness_warning(loading.load_prices(mk))
+        if w:
+            print(f"\n[캐시] {mk.upper()}: {w}")
+
+
 def cmd_selftest():
     ok = []
 
@@ -677,6 +1037,61 @@ def cmd_selftest():
     chk("m < BETA_WIN−1 가드 존재 (미래 β 혼입 방지)",
         "m < BETA_WIN - 1" in src)
 
+    # ── 아래는 **게이트 통과 후 작성한 `--run` 전용** 보조 함수 검증이다.
+    #    사전등록 §5 의 44항목은 위까지이며, 여기부터는 판정 코드의 자기검증이다.
+    chk("tstat = 평균 / (s/√n) — 손계산 대조",
+        np.isclose(tstat([1.0, 2.0, 3.0, 4.0]),
+                   2.5 / (np.std([1.0, 2, 3, 4], ddof=1) / 2.0)))
+    chk("spearman 완전 단조 증가 = +1 · 반전 = −1",
+        np.isclose(spearman([1, 2, 3, 4, 5], [10, 20, 30, 40, 50]), 1.0)
+        and np.isclose(spearman([1, 2, 3, 4, 5], [50, 40, 30, 20, 10]), -1.0))
+    chk("cagr: 월 +1% 12개월 = 연 (1.01^12−1) = 12.68%",
+        np.isclose(cagr(np.full(12, 1.0)), (1.01 ** 12 - 1) * 100))
+    chk("cagr: 월 0% 이면 0%", np.isclose(cagr(np.zeros(24)), 0.0))
+    # type_m — **몬테카를로와 대조**한다 (닫힌 형태의 적분 오류를 잡는 유일한 방법.
+    # H-026 게이트 3회차가 이 자리에서 실제 오류를 잡았다).
+    _rng = np.random.default_rng(20260819)
+    _mc_ok = True
+    for _se, _eff in ((0.39, 1.568), (0.27, 0.691), (1.0, 0.5)):
+        _d = _eff / _se
+        _z = _rng.normal(_d, 1.0, 400_000)
+        _s = np.abs(_z) > K_CRIT
+        _mc = float(np.abs(_z[_s]).mean() / _d)
+        if abs(type_m(_se, _eff) - _mc) > 0.02:
+            _mc_ok = False
+    chk("type_m 닫힌 형태 ↔ 몬테카를로 일치 (3조건, 허용오차 0.02)", _mc_ok)
+    chk("type_m: 효과가 SE 대비 매우 크면 1.0 에 수렴(과대추정 없음)",
+        abs(type_m(0.01, 1.0) - 1.0) < 1e-6)
+    chk("type_m: 검정력이 낮을수록 배율이 커진다",
+        type_m(1.0, 0.3) > type_m(0.3, 0.3) > type_m(0.05, 0.3))
+    # `_pooled_cost` — 표본가중 평균이 맞는가 (손계산 대조)
+    _a1 = {"cost": np.array([[0.1, 0, 0, 0, 0.3]]), "n": 10}
+    _a2 = {"cost": np.array([[0.2, 0, 0, 0, 0.4]]), "n": 30}
+    chk("_pooled_cost 롱숏 = 표본가중((0.1+0.3),(0.2+0.4)) = 0.55",
+        np.isclose(_pooled_cost({"a": _a1, "b": _a2}), (0.4 * 10 + 0.6 * 30) / 40))
+    chk("_pooled_cost 롱온리 = Q5 다리만 = 0.375",
+        np.isclose(_pooled_cost({"a": _a1, "b": _a2}, longonly=True),
+                   (0.3 * 10 + 0.4 * 30) / 40))
+    # `--run` 이 사전등록한 견고성 4축을 **실제로 호출하는가**
+    rsrc = inspect.getsource(cmd_run)
+    chk("--run 이 §3.4 네 축(exec_lag · ret_cap · cap_n 2종)을 전부 호출",
+        "exec_lag=1" in rsrc and "ret_cap=RET_CAP" in rsrc
+        and "cap_n=CAP_N[mk]" in rsrc and "cap_n=CAP_N2[mk]" in rsrc)
+    chk("--run 이 direction=LIT_DIR 을 판정에 넘긴다 (H-028 결함 재발 방지)",
+        "direction=LIT_DIR" in rsrc and "direction=LIT_DIR" in inspect.getsource(_report_cell))
+    chk("--run 이 §3.3 플라시보 4종을 전부 돌린다",
+        all(p in rsrc for p in ("P1 σ정렬", "P2 σ직교화", "P3 계수무작위", "P4 규모정렬")))
+    chk("견고성 축 N 은 저장소 규약값(베이스라인 C 400/500)과 그 절반",
+        CAP_N == {"kr": 400, "us": 500} and CAP_N2 == {"kr": 200, "us": 250})
+    chk("--run 이 플라시보를 **본안 표본으로 맞춰** 크기를 비교한다 (§3.3 조건 3)",
+        "s.index.isin(ser[mk].index)" in rsrc)
+    # 표본 정렬 자체가 의도대로 되는가 — 합성 인덱스로 실동작 확인
+    _ix = pd.period_range("2020-01", periods=10, freq="M")
+    _s = pd.Series(np.arange(10.0), index=_ix)
+    _base = pd.Series(np.zeros(4), index=_ix[3:7])
+    chk("표본 정렬: 본안 인덱스에 있는 달만 남는다",
+        list(_s[_s.index.isin(_base.index)].index) == list(_ix[3:7]))
+
     for num, name, good in ok:
         print(f"  {'PASS' if good else 'FAIL'}  {num}. {name}")
     bad = [n for n, _, g in ok if not g]
@@ -690,6 +1105,8 @@ if __name__ == "__main__":
         sys.exit(cmd_selftest())
     elif arg == "--power":
         cmd_power()
+    elif arg == "--run":
+        cmd_run()
     else:
         print(__doc__)
         sys.exit(2)
